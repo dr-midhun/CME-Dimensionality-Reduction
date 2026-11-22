@@ -36,6 +36,17 @@ usage: cme_cli <network.net> [options]
 | `--out <PREFIX>` | String (default: `out`) | Prefix for all generated output files. |
 | `--dump-matrix` | Flag | Export the full sparse transition matrix $D$ in Matrix Market format (`.D.mtx`). |
 | `--dump-states` | Flag | Export state space enumeration to CSV (`.states.csv`). |
+| `--reduce` | Flag | Perform Algorithm 4 dimensionality reduction (computes $X_0$, $Q_{dd}$, and back-projection). |
+| `--transform <none\|left>` | Enum (default: `left`) | Reduction transformation matrix ($T = \text{LeftEigenbasis}$ preserves probability). |
+| `--solve-time <T>` | Float | Evaluate continuous approximate distribution $P(T)$ under Algorithm 4. |
+| `--alg1-bfs` | Flag | Run Thesis Algorithm 1 (breadth-first iterative CME generation). |
+| `--fsp <classic\|fixed\|variable>` | Enum | Run FSP: `classic` (Alg 6), `fixed` (Alg 7), or `variable` (Alg 8). |
+| `--preconditioned-fsp` | Flag | Run Thesis Algorithm 9 (transient multi-time-step FSP with preconditioning). |
+| `--t0 <T>` | Float (default: `0.0`) | Initial simulation time for FSP integration. |
+| `--tf <T>` | Float (default: `1.0`) | Final simulation time for FSP integration. |
+| `--eps <X>` | Float (default: `1e-4`) | Error tolerance $\varepsilon$ for FSP state truncation / preconditioning error dynamics. |
+| `--t-eps <X>` | Float (default: `0.01`) | Fast mode decay timescale parameter $t_\varepsilon$ for preconditioning. |
+| `--num-steps <N>` | Integer (default: `10`) | Number of uniform subintervals for fixed-step FSP (Alg 7). |
 | `--verbose` | Flag | Print per-iteration progress metrics. |
 
 ---
@@ -88,6 +99,13 @@ Running with `--out <PREFIX>` produces the following files:
 | `<PREFIX>.eigenvectors.bin`| Binary (`float64`, $n \times d$) | Full state eigenvectors $B \cdot \text{eigvec}(D_{red})$ (produced when eigenvalues are all real). |
 | `<PREFIX>.D.mtx` *(optional)* | Matrix Market (`.mtx`) | Full sparse transition matrix $D$ (generated when `--dump-matrix` is passed). |
 | `<PREFIX>.states.csv` *(optional)* | CSV | Table of mapped states (counts per species per row; generated with `--dump-states`). |
+| `<PREFIX>.q_reduced.csv` *(optional)* | CSV ($d \times d$) | Reduced generator matrix $Q_{dd}$ from Algorithm 4. |
+| `<PREFIX>.x0.csv` *(optional)* | CSV ($d \times 1$) | Projected initial condition $X(0) = T_{nd}^T P(0)$. |
+| `<PREFIX>.perm.txt` *(optional)* | Text integers | State permutation index array ordering pivot states first. |
+| `<PREFIX>.p_approx.csv` *(optional)* | CSV ($n \times 1$) | Approximate distribution $P(T)$ evaluated at `--solve-time`. |
+| `<PREFIX>.fsp_prob.csv` *(optional)* | CSV ($|J| \times 1$) | Truncated state probability distribution from FSP (Alg 6, 7, 8). |
+| `<PREFIX>.prefsp_prob.csv` *(optional)* | CSV ($|N_{\text{full}}| \times 1$) | Continuous solution distribution $P(t_f)$ from Preconditioned FSP (Alg 9–12). |
+| `<PREFIX>.prefsp_steps.csv` *(optional)* | CSV | Snapshot intervals $(\text{step}, t_{\text{start}}, t_{\text{end}}, \tau, d, |N_k|)$. |
 
 ---
 
@@ -125,3 +143,25 @@ For stiff systems where reaction rate constants differ by orders of magnitude (e
 ```
 
 * `--cutoff <X>` defines the spectral threshold between target eigenvalues and the stiff decay spectrum ($|\ln \varepsilon| / t_\varepsilon$).
+
+---
+
+## 7. Running FSP and Preconditioned FSP (Algorithms 6–12)
+
+### Classic and Multi-Step FSP:
+```bash
+# Classic FSP (Algorithm 6)
+./build/cme_cli examples/michaelis_menten.net --fsp classic --tf 0.1 --eps 1e-4 --out fsp_classic
+
+# Fixed-Step Multi-Step FSP (Algorithm 7)
+./build/cme_cli examples/michaelis_menten.net --fsp fixed --t0 0.0 --tf 0.1 --num-steps 5 --eps 1e-4
+
+# Adaptive Variable-Step FSP (Algorithm 8)
+./build/cme_cli examples/michaelis_menten.net --fsp variable --tf 0.1 --eps 1e-4
+```
+
+### Transient Multi-Time-Step FSP with Preconditioning (Algorithms 9–12):
+```bash
+./build/cme_cli examples/michaelis_menten.net --preconditioned-fsp --d 4 --t0 0.0 --tf 0.5 --eps 1e-4 --t-eps 0.01 --out prefsp
+```
+Outputs continuous trajectory snapshots to `prefsp.prefsp_steps.csv` and final state probability vector to `prefsp.prefsp_prob.csv`.

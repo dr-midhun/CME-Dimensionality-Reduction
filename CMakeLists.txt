@@ -1,8 +1,11 @@
 cmake_minimum_required(VERSION 3.18)
 project(Dimensionality_Reduction_of_the_Chemical_Master_Equation LANGUAGES CXX)
 
+include(GNUInstallDirs)
+
 option(CME_ENABLE_CUDA   "Build the GPU backend (cuBLAS + cuSPARSE)" OFF)
 option(CME_ENABLE_LAPACK "Use LAPACK dgeev for the d x d reduced eigenproblem" ON)
+option(CME_ENABLE_ASAN   "Enable AddressSanitizer and UndefinedBehaviorSanitizer" OFF)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -19,9 +22,16 @@ add_library(cme STATIC src/network.cpp src/csr_util.cpp
                        src/alg5_eigenbasis.cpp src/alg5_eigenbasis_cpu.cpp
                        src/alg6_7_8_fsp.cpp
                        src/alg9_10_11_12_preconditioned_fsp.cpp)
-target_include_directories(cme PUBLIC include)
+target_include_directories(cme PUBLIC 
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
 target_link_libraries(cme PUBLIC OpenMP::OpenMP_CXX)
 target_compile_options(cme PRIVATE -Wall -Wextra)
+
+if(CME_ENABLE_ASAN)
+  target_compile_options(cme PUBLIC -fsanitize=address,undefined -fno-omit-frame-pointer)
+  target_link_options(cme PUBLIC -fsanitize=address,undefined)
+endif()
 
 if(CME_ENABLE_LAPACK)
   find_package(LAPACK)
@@ -46,6 +56,14 @@ add_executable(test_small tests/test_small.cpp)
 target_link_libraries(test_small PRIVATE cme)
 add_executable(test_exhaustive tests/test_exhaustive.cpp)
 target_link_libraries(test_exhaustive PRIVATE cme)
+
+install(TARGETS cme cme_cli
+        EXPORT CmeTargets
+        ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+
 enable_testing()
 add_test(NAME thesis_mm_cpu COMMAND test_small)
 add_test(NAME thesis_exhaustive_cpu COMMAND test_exhaustive)

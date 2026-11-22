@@ -1,0 +1,70 @@
+name: CME CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  ubuntu:
+    name: Ubuntu (GCC/Clang)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential libomp-dev liblapack-dev cmake
+
+      - name: Build and test with Makefile (CPU + LAPACK)
+        run: |
+          make clean
+          make -j$(nproc) LAPACK=1
+          make test
+          make test-gpu-logic
+
+      - name: Build and test with CMake
+        run: |
+          cmake -B build-cmake -DCME_ENABLE_LAPACK=ON
+          cmake --build build-cmake -j$(nproc)
+          ctest --test-dir build-cmake --output-on-failure
+
+  macos:
+    name: macOS (Apple Clang)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          brew install libomp cmake
+
+      - name: Build and test with Makefile
+        run: |
+          make clean
+          make -j$(sysctl -n hw.ncpu)
+          make test
+          make test-gpu-logic
+
+      - name: Build and test with CMake
+        run: |
+          cmake -B build-cmake -DOpenMP_ROOT=$(brew --prefix libomp)
+          cmake --build build-cmake -j$(sysctl -n hw.ncpu)
+          ctest --test-dir build-cmake --output-on-failure
+
+  windows:
+    name: Windows (MSVC)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure and build with CMake
+        run: |
+          cmake -B build -A x64
+          cmake --build build --config Release
+
+      - name: Run tests with CTest
+        run: |
+          ctest --test-dir build -C Release --output-on-failure

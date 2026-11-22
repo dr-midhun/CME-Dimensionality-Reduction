@@ -6,47 +6,11 @@
 #include <stdexcept>
 
 #include "cme/alg4_reduction.hpp"
+#include "cme/propensity.hpp"
 
 namespace cme {
 
 namespace {
-
-/**
- * @brief Computes binomial coefficient (n choose k).
- *
- * @param n Available count of molecules.
- * @param k Stoichiometric coefficient required.
- * @return Binomial coefficient value.
- */
-double n_choose_k(int n, int k) {
-    if (k < 0 || k > n) return 0.0;
-    if (k == 0 || k == n) return 1.0;
-    if (k == 1) return static_cast<double>(n);
-    if (k == 2) return 0.5 * n * (n - 1);
-    double res = 1.0;
-    for (int i = 1; i <= k; ++i) res = res * (n - i + 1) / i;
-    return std::round(res);
-}
-
-/**
- * @brief Evaluates reaction propensity for reaction r given molecular count vector N.
- *
- * @param net Reaction network holding rates and stoichiometry.
- * @param r Zero-based index of reaction.
- * @param N State vector of molecular counts.
- * @return Transition propensity rate.
- */
-double reaction_propensity(const Network& net, int r, const std::vector<int>& N) {
-    double h = 1.0;
-    for (int s = 0; s < net.k(); ++s) {
-        int stoich = net.R[r][s];
-        if (stoich > 0) {
-            if (N[s] < stoich) return 0.0;
-            h *= n_choose_k(N[s], stoich);
-        }
-    }
-    return net.rate[r] * h;
-}
 
 /**
  * @brief Constructs the truncated transition rate matrix D_J over the subset state space N_J.

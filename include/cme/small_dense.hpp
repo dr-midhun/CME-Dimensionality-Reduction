@@ -10,11 +10,17 @@ namespace cme {
 inline void dense_inverse(int d, double* A) {
     std::vector<double> inv(static_cast<size_t>(d) * d, 0.0);
     for (int i = 0; i < d; ++i) inv[i * d + i] = 1.0;
+    double max_a = 0.0;
+    for (int i = 0; i < d * d; ++i) {
+        double val = std::fabs(A[i]);
+        if (val > max_a) max_a = val;
+    }
+    const double piv_tol = std::max(1e-14 * max_a, 1e-300);
     for (int c = 0; c < d; ++c) {
         int p = c;
         for (int r = c + 1; r < d; ++r)
             if (std::fabs(A[r * d + c]) > std::fabs(A[p * d + c])) p = r;
-        if (std::fabs(A[p * d + c]) < 1e-300)
+        if (std::fabs(A[p * d + c]) < piv_tol)
             throw std::runtime_error("pivot block is singular (basis lost rank)");
         if (p != c)
             for (int j = 0; j < d; ++j) {

@@ -3,72 +3,9 @@
 #include <map>
 #include <stdexcept>
 
+#include "cme/propensity.hpp"
+
 namespace cme {
-
-namespace {
-
-/**
- * @brief Computes the binomial coefficient (n choose k) for integer molecule counts.
- *
- * Used in evaluating stoichiometric reaction combinations according to Mass Action kinetics.
- *
- * @param n Total available molecules of a given reactant species.
- * @param k Required stoichiometric molecules of the species in the reaction.
- * @return Value of n! / (k! * (n - k)!) as a double.
- */
-double n_choose_k(int n, int k) {
-    // If fewer molecules are required than 0 or more than available n, combination is impossible (0)
-    if (k < 0 || k > n) return 0.0;
-    // Base cases: choosing 0 or all n items yields exactly 1 combination
-    if (k == 0 || k == n) return 1.0;
-    // Choosing 1 item yields n combinations
-    if (k == 1) return static_cast<double>(n);
-    // Choosing 2 items yields n*(n-1)/2
-    if (k == 2) return 0.5 * n * (n - 1);
-    // Choosing 3 items yields n*(n-1)*(n-2)/6
-    if (k == 3) return (n * (n - 1.0) * (n - 2.0)) / 6.0;
-
-    // General product formula: prod_{i=1}^k (n - i + 1) / i
-    double res = 1.0;
-    for (int i = 1; i <= k; ++i) {
-        // Multiplies by the decreasing numerator factor and divides by the current factorial step
-        res = res * (n - i + 1) / i;
-    }
-    // Round to nearest integer to eliminate floating point accumulation inaccuracies
-    return std::round(res);
-}
-
-/**
- * @brief Evaluates the reaction propensity h_r(N) * c_r for reaction r given current state vector N.
- *
- * Implements standard stochastic chemical kinetics under the law of mass action.
- *
- * @param net Reaction network holding reaction rates and stoichiometric matrices.
- * @param r Zero-based index of the reaction to evaluate.
- * @param N State vector of molecular populations for all species.
- * @return Transition propensity (rate) for reaction r. Returns 0.0 if insufficient reactants.
- */
-double reaction_propensity(const Network& net, int r, const std::vector<int>& N) {
-    // Initialize combinatorial combination counter to 1.0
-    double h = 1.0;
-
-    // Loop through each species s in the network
-    for (int s = 0; s < net.k(); ++s) {
-        // Look up the required reactant stoichiometry for species s in reaction r
-        int stoich = net.R[r][s];
-        // If this species is a reactant in reaction r
-        if (stoich > 0) {
-            // If the current molecule count is strictly less than required stoichiometry, reaction cannot fire
-            if (N[s] < stoich) return 0.0;
-            // Multiply combination factor by (N[s] choose stoich)
-            h *= n_choose_k(N[s], stoich);
-        }
-    }
-    // Propensity equals the reaction rate constant multiplied by the combinatorial factor h
-    return net.rate[r] * h;
-}
-
-}  // namespace
 
 /**
  * @brief Generates state space and infinitesimal generator D using Thesis Algorithm 1.

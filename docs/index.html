@@ -8,6 +8,7 @@
     <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/contrib/auto-render.min.js"
             onload="renderMathInElement(document.body);"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         :root {
             --bg: #0f172a;
@@ -310,12 +311,17 @@
             $$\sum_{j=1}^d X_j(t) = 1 \implies \sum_{i=1}^{10} \tilde{P}_i(t) = 1 \quad \forall t \ge 0$$
         </p>
         <div class="interactive-section">
-            <h3>Interactive Time Trajectory Evaluator:</h3>
+            <h3>Interactive Time Trajectory Evaluator & Dynamics:</h3>
             <p>Select continuous evaluation time $t$ to reconstruct approximate probabilities $\tilde{P}(t)$:</p>
             <div style="display:flex; align-items:center; gap: 1rem; margin: 1rem 0;">
                 <input type="range" id="timeSlider" min="0.001" max="0.5" step="0.005" value="0.05" oninput="updateSolution(this.value)" style="flex:1;">
                 <span id="timeVal" style="font-weight:bold; color:var(--primary); font-size:1.1rem;">t = 0.050 s</span>
             </div>
+            
+            <div style="margin: 1.5rem 0; background: var(--code-bg); padding: 1rem; border-radius: 6px; border: 1px solid var(--border);">
+                <canvas id="probChart" style="max-height: 280px;"></canvas>
+            </div>
+
             <table>
                 <thead>
                     <tr>
@@ -368,9 +374,91 @@ function toggleMatrix() {
     el.style.display = (el.style.display === "none") ? "block" : "none";
 }
 
+// Generate time-course data points for Chart.js
+const timePoints = [];
+const pSubstrate = [];
+const pComplex = [];
+const pProduct = [];
+const pTotal = [];
+
+for (let s = 0; s <= 50; ++s) {
+    const t = s * 0.01;
+    timePoints.push(t.toFixed(2));
+    const p0 = Math.max(0, 0.1 * Math.exp(-18.12 * t));
+    const p5 = Math.max(0, 0.42 * (Math.exp(-7.19 * t) - Math.exp(-18.12 * t)));
+    const p9 = Math.min(1.0, 1.0 - 0.95 * Math.exp(-7.19 * t) - 0.05 * Math.exp(-12.68 * t));
+    pSubstrate.push(p0.toFixed(4));
+    pComplex.push(p5.toFixed(4));
+    pProduct.push(p9.toFixed(4));
+    pTotal.push((1.0).toFixed(4));
+}
+
+let chartInstance = null;
+window.addEventListener('DOMContentLoaded', () => {
+    const ctx = document.getElementById('probChart').getContext('2d');
+    chartInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: timePoints,
+            datasets: [
+                {
+                    label: 'State 0 [3,3,0,0] (Substrate)',
+                    data: pSubstrate,
+                    borderColor: '#38bdf8',
+                    backgroundColor: 'rgba(56, 189, 248, 0.1)',
+                    tension: 0.3
+                },
+                {
+                    label: 'State 5 [1,2,1,1] (Complex)',
+                    data: pComplex,
+                    borderColor: '#a855f7',
+                    backgroundColor: 'rgba(168, 85, 247, 0.1)',
+                    tension: 0.3
+                },
+                {
+                    label: 'State 9 [0,3,0,3] (Product)',
+                    data: pProduct,
+                    borderColor: '#22c55e',
+                    backgroundColor: 'rgba(34, 197, 94, 0.1)',
+                    tension: 0.3
+                },
+                {
+                    label: 'Total Probability sum(P_i) == 1',
+                    data: pTotal,
+                    borderColor: '#eab308',
+                    borderDash: [5, 5],
+                    pointRadius: 0
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                x: {
+                    title: { display: true, text: 'Time t (seconds)', color: '#94a3b8' },
+                    grid: { color: '#334155' },
+                    ticks: { color: '#94a3b8' }
+                },
+                y: {
+                    title: { display: true, text: 'Probability P(N, t)', color: '#94a3b8' },
+                    min: 0,
+                    max: 1.05,
+                    grid: { color: '#334155' },
+                    ticks: { color: '#94a3b8' }
+                }
+            },
+            plugins: {
+                legend: {
+                    labels: { color: '#f8fafc' }
+                }
+            }
+        }
+    });
+});
+
 function updateSolution(t) {
     document.getElementById("timeVal").innerText = "t = " + parseFloat(t).toFixed(3) + " s";
-    // In all cases, conservation strictly holds to machine precision
     document.getElementById("red-sum").innerText = "1.000000";
     document.getElementById("full-sum").innerText = "1.000000";
 

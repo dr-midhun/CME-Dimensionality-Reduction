@@ -8,48 +8,12 @@
 #include "cme/alg4_reduction.hpp"
 #include "cme/alg5_eigenbasis.hpp"
 #include "cme/csr_util.hpp"
+#include "cme/propensity.hpp"
 #include "cme/small_dense.hpp"
 
 namespace cme {
 
 namespace {
-
-/**
- * @brief Computes binomial coefficient (n choose k) for reaction stoichiometry.
- *
- * @param n Available count of molecules.
- * @param k Required stoichiometric coefficient.
- * @return Value of n! / (k! * (n - k)!).
- */
-double n_choose_k(int n, int k) {
-    if (k < 0 || k > n) return 0.0;
-    if (k == 0 || k == n) return 1.0;
-    if (k == 1) return static_cast<double>(n);
-    if (k == 2) return 0.5 * n * (n - 1);
-    double res = 1.0;
-    for (int i = 1; i <= k; ++i) res = res * (n - i + 1) / i;
-    return std::round(res);
-}
-
-/**
- * @brief Evaluates mass-action reaction propensity for reaction r at state N.
- *
- * @param net Reaction network holding reaction rates and stoichiometric matrices.
- * @param r Reaction index.
- * @param N State vector of molecular populations.
- * @return Reaction transition rate.
- */
-double reaction_propensity(const Network& net, int r, const std::vector<int>& N) {
-    double h = 1.0;
-    for (int s = 0; s < net.k(); ++s) {
-        int stoich = net.R[r][s];
-        if (stoich > 0) {
-            if (N[s] < stoich) return 0.0;
-            h *= n_choose_k(N[s], stoich);
-        }
-    }
-    return net.rate[r] * h;
-}
 
 /**
  * @brief Constructs infinitesimal generator matrix D for a given sub-collection of states.
@@ -247,40 +211,73 @@ PreconditionResult alg10_precondition(const Csr& D, const std::vector<double>& P
         Q_aug[d * d_aug + c] = -col_sum;
     }
 
-    std::vector<double> Z_aug0(d_aug);
-    double sumZ0 = 0.0;
+    std::vector<double> Z_aug0(d_aug, 0.0);
     for (int i = 0; i < d; ++i) {
         Z_aug0[i] = res.Z0[i];
-        sumZ0 += res.Z0[i];
     }
-    Z_aug0[d] = 1.0 - sumZ0;
+    // Augmented error variable Z_eps(0) measures leakage during this interval, initialized to 0 (Thesis eq. 5.6)
+    Z_aug0[d] = 0.0;
 
-    // Step 8: Search for optimal continuous time step tau where Z_eps(tau) <= eps
-    double step_size = (t_eps > 0.0) ? t_eps : 0.01;
-    double tau = step_size;
-    std::vector<double> best_Z(d);
-
-    for (int s = 1; s <= 20; ++s) {
-        double test_t = s * (step_size / 4.0);
+    // Step 8: Search for optimal continuous time step tau where Z_eps(tau) <= eps via adaptive root finding
+    auto eval_aug = [&](double test_t) -> std::pair<double, std::vector<double>> {
         std::vector<double> Q_t(static_cast<size_t>(d_aug) * d_aug);
         for (size_t i = 0; i < Q_t.size(); ++i) Q_t[i] = Q_aug[i] * test_t;
         std::vector<double> expQt(static_cast<size_t>(d_aug) * d_aug);
         matrix_exp(d_aug, Q_t.data(), expQt.data());
 
-        // Propagate augmented state Z_aug(t) = exp(Q_aug * t) * Z_aug0
         std::vector<double> Z_aug_t(d_aug, 0.0);
         for (int r = 0; r < d_aug; ++r) {
             double sum_r = 0.0;
             for (int c = 0; c < d_aug; ++c) sum_r += expQt[r * d_aug + c] * Z_aug0[c];
             Z_aug_t[r] = sum_r;
         }
+        double err = std::fabs(Z_aug_t[d]);
+        std::vector<double> Z_d(d);
+        for (int i = 0; i < d; ++i) Z_d[i] = Z_aug_t[i];
+        return {err, Z_d};
+    };
 
-        double z_eps = std::fabs(Z_aug_t[d]);
-        if (z_eps <= eps || s == 1) {
-            tau = test_t;
-            for (int i = 0; i < d; ++i) best_Z[i] = Z_aug_t[i];
+    double max_outflow = 0.0;
+    for (int c = 0; c < d; ++c) {
+        max_outflow = std::max(max_outflow, std::fabs(Q_aug[d * d_aug + c]));
+    }
+
+    double step_base = (t_eps > 0.0) ? t_eps : 0.01;
+    double tau = step_base;
+    std::vector<double> best_Z(d);
+
+    if (max_outflow < 1e-12) {
+        // Closed system with no leakage: step size can safely span up to 5 * step_base
+        tau = 5.0 * step_base;
+        best_Z = eval_aug(tau).second;
+    } else {
+        // Open/truncated system with leakage: find largest tau where leakage <= eps
+        double t_low = 0.0;
+        double t_high = step_base;
+        auto [err_high, z_high] = eval_aug(t_high);
+        while (err_high <= eps && t_high < 10.0 * step_base) {
+            t_low = t_high;
+            t_high *= 1.5;
+            auto res_eval = eval_aug(t_high);
+            err_high = res_eval.first;
+            z_high = res_eval.second;
+        }
+        if (err_high > eps) {
+            for (int iter = 0; iter < 12; ++iter) {
+                double t_mid = 0.5 * (t_low + t_high);
+                auto [err_mid, z_mid] = eval_aug(t_mid);
+                if (err_mid <= eps) {
+                    t_low = t_mid;
+                    best_Z = z_mid;
+                } else {
+                    t_high = t_mid;
+                }
+            }
+            tau = t_low > 0.0 ? t_low : step_base * 0.25;
+            if (best_Z.empty()) best_Z = eval_aug(tau).second;
         } else {
-            break;
+            tau = t_high;
+            best_Z = z_high;
         }
     }
 
@@ -449,6 +446,13 @@ std::vector<double> alg12_transient_solution(const std::vector<TransientStepSnap
         if (it != full_map.end()) {
             P_sol[it->second] = P_loc[i];
         }
+    }
+
+    // Enforce total probability conservation if within perturbation range
+    double sum_p = 0.0;
+    for (double v : P_sol) sum_p += v;
+    if (sum_p > 0.0 && std::fabs(sum_p - 1.0) < 0.1) {
+        for (double& v : P_sol) v /= sum_p;
     }
 
     return P_sol;

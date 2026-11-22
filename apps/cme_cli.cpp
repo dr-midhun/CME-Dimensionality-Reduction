@@ -7,6 +7,9 @@
 #include <iostream>
 #include <string>
 
+#include "cme/alg1_cme.hpp"
+#include "cme/alg6_7_8_fsp.hpp"
+#include "cme/alg9_10_11_12_preconditioned_fsp.hpp"
 #include "cme/eigenbasis.hpp"
 #include "cme/network.hpp"
 #include "cme/reduction.hpp"
@@ -18,25 +21,35 @@ using namespace cme;
 static void usage() {
     std::puts(
         "usage: cme_cli <network.net> [options]\n"
-        "  --d N            basis dimension (default 2, max 64)\n"
-        "  --mode slow|fast slow: eigenvalues nearest 0 (default); fast: largest |lambda|\n"
-        "  --backend cpu|gpu\n"
-        "  --tol X          stop when max|K B - B Kred| < X (default 1e-10)\n"
-        "  --max-iter N     outer iterations (default 200000)\n"
-        "  --inner N        plain power mode: products between normalisations (default 4)\n"
-        "  --cutoff X       Chebyshev mode: wanted |lambda| < X (slow) or > X (fast); thesis eq. 4.55\n"
-        "  --degree N       Chebyshev polynomial degree (default 100)\n"
-        "  --shift X        sigma; default Gershgorin bound 2*max|D_ii|\n"
-        "  --out PREFIX     output prefix (default 'out')\n"
-        "  --dump-matrix    write PREFIX.D.mtx (Matrix Market)\n"
-        "  --dump-states    write PREFIX.states.csv\n"
-        "  --reduce         perform Algorithm 4 reduction (computes X0, Qdd, back-projection)\n"
+        "  --d N                  basis dimension (default 2, max 64)\n"
+        "  --mode slow|fast       slow: eigenvalues nearest 0 (default); fast: largest |lambda|\n"
+        "  --backend cpu|gpu      backend to use for eigenbasis (default: cpu)\n"
+        "  --tol X                stop when max|K B - B Kred| < X (default 1e-10)\n"
+        "  --max-iter N           outer iterations (default 200000)\n"
+        "  --inner N              plain power mode: products between normalisations (default 4)\n"
+        "  --cutoff X             Chebyshev mode: wanted |lambda| < X (slow) or > X (fast); thesis eq. 4.55\n"
+        "  --degree N             Chebyshev polynomial degree (default 100)\n"
+        "  --shift X              sigma; default Gershgorin bound 2*max|D_ii|\n"
+        "  --out PREFIX           output prefix (default 'out')\n"
+        "  --dump-matrix          write PREFIX.D.mtx (Matrix Market)\n"
+        "  --dump-states          write PREFIX.states.csv\n"
+        "  --reduce               perform Algorithm 4 reduction (computes X0, Qdd, back-projection)\n"
         "  --transform none|left  reduction transform (default 'left': left eigenbasis, preserving probability)\n"
-        "  --solve-time T   time at which to evaluate approximate distribution P(T) under Algorithm 4\n"
+        "  --solve-time T         time at which to evaluate approximate distribution P(T) under Algorithm 4\n"
+        "  --alg1-bfs             run Algorithm 1 (breadth-first iterative CME state generation)\n"
+        "  --fsp MODE             run FSP: 'classic' (Alg 6), 'fixed' (Alg 7), or 'variable' (Alg 8)\n"
+        "  --preconditioned-fsp   run Algorithm 9 (transient multi-time-step FSP with preconditioning)\n"
+        "  --t0 T                 initial simulation time for FSP (default 0.0)\n"
+        "  --tf T                 final simulation time for FSP (default 1.0)\n"
+        "  --eps X                error tolerance for FSP / preconditioning (default 1e-4)\n"
+        "  --t-eps X              error dynamics timescale t_eps for preconditioning (default 0.01)\n"
+        "  --num-steps N          number of time steps for fixed FSP (default 10)\n"
         "  --verbose\n"
         "outputs: PREFIX.basis.bin (float64, row-major n x d), PREFIX.pivots.txt,\n"
         "         PREFIX.dreduced.csv, PREFIX.eigenvalues.csv, PREFIX.eigenvectors.bin (if all real)\n"
-        "         with --reduce: PREFIX.q_reduced.csv, PREFIX.x0.csv, PREFIX.perm.txt, [PREFIX.p_approx.csv]");
+        "         with --reduce: PREFIX.q_reduced.csv, PREFIX.x0.csv, PREFIX.perm.txt, [PREFIX.p_approx.csv]\n"
+        "         with --fsp: PREFIX.fsp_prob.csv\n"
+        "         with --preconditioned-fsp: PREFIX.prefsp_prob.csv, PREFIX.prefsp_steps.csv");
 }
 
 int main(int argc, char** argv) {
@@ -46,8 +59,17 @@ int main(int argc, char** argv) {
     Backend backend = Backend::Cpu;
     bool dump_mtx = false, dump_states = false;
     bool run_reduction = false;
+    bool run_alg1 = false;
+    std::string fsp_mode;
+    bool run_prefsp = false;
+    double t0 = 0.0;
+    double tf = 1.0;
+    double eps = 1e-4;
+    double t_eps = 0.01;
+    int num_fsp_steps = 10;
     ReductionTransform red_transform = ReductionTransform::LeftEigenbasis;
     double solve_time = -1.0;
+
     for (int i = 2; i < argc; ++i) {
         std::string a = argv[i];
         auto next = [&]() -> const char* {
@@ -77,12 +99,89 @@ int main(int argc, char** argv) {
             solve_time = std::atof(next());
             run_reduction = true;
         }
+        else if (a == "--alg1-bfs") run_alg1 = true;
+        else if (a == "--fsp") fsp_mode = next();
+        else if (a == "--preconditioned-fsp") run_prefsp = true;
+        else if (a == "--t0") t0 = std::atof(next());
+        else if (a == "--tf") tf = std::atof(next());
+        else if (a == "--eps") eps = std::atof(next());
+        else if (a == "--t-eps") t_eps = std::atof(next());
+        else if (a == "--num-steps") num_fsp_steps = std::atoi(next());
         else if (a == "--verbose") opt.verbose = true;
         else { std::fprintf(stderr, "unknown option %s\n", a.c_str()); usage(); return 1; }
     }
+
     try {
-        double t = omp_get_wtime();
         Network net = parse_network(path);
+
+        // Optional Algorithm 1 run
+        if (run_alg1) {
+            std::puts("--- Algorithm 1 (Iterative BFS CME Generation) ---");
+            double t_bfs = omp_get_wtime();
+            Alg1Result a1 = alg1_generate_cme(net);
+            t_bfs = omp_get_wtime() - t_bfs;
+            std::printf("Alg 1: discovered %zu states, %lld transitions (%.3fs)\n",
+                        a1.states.size(), (long long)a1.D.nnz(), t_bfs);
+        }
+
+        // Optional FSP execution (Alg 6, 7, or 8)
+        if (!fsp_mode.empty()) {
+            std::printf("--- Finite State Projection (%s) ---\n", fsp_mode.c_str());
+            double t_fsp = omp_get_wtime();
+            FspOptions fsp_opt;
+            fsp_opt.tf = tf;
+            fsp_opt.eps = eps;
+            fsp_opt.n_intervals = num_fsp_steps;
+            FspResult fsp_res;
+            if (fsp_mode == "classic") {
+                fsp_res = alg6_fsp(net, fsp_opt);
+            } else if (fsp_mode == "fixed") {
+                fsp_res = alg7_multistep_fixed_fsp(net, fsp_opt);
+            } else if (fsp_mode == "variable") {
+                fsp_res = alg8_multistep_variable_fsp(net, fsp_opt);
+            } else {
+                throw std::invalid_argument("unknown fsp mode: " + fsp_mode + " (use classic, fixed, or variable)");
+            }
+            t_fsp = omp_get_wtime() - t_fsp;
+            std::printf("FSP converged: %s | states = %zu | error bound = %.2e | time = %.3fs\n",
+                        fsp_res.converged ? "yes" : "NO", fsp_res.states.size(), fsp_res.error_bound, t_fsp);
+            std::ofstream f(prefix + ".fsp_prob.csv");
+            f.precision(17);
+            for (double p : fsp_res.prob) f << p << "\n";
+            std::printf("FSP distribution saved to %s.fsp_prob.csv\n", prefix.c_str());
+        }
+
+        // Optional Preconditioned FSP execution (Alg 9, 10, 11, 12)
+        if (run_prefsp) {
+            std::puts("--- Algorithm 9 (Transient Multi-Time-Step FSP with Preconditioning) ---");
+            double t_prefsp = omp_get_wtime();
+            PreconditionedFspResult prefsp_res = alg9_preconditioned_fsp(net, t0, tf, eps, t_eps, opt.d);
+            t_prefsp = omp_get_wtime() - t_prefsp;
+            std::printf("Preconditioned FSP converged: %s | subintervals = %d | union states = %zu | time = %.3fs\n",
+                        prefsp_res.converged ? "yes" : "NO", prefsp_res.num_subintervals,
+                        prefsp_res.full_states.size(), t_prefsp);
+
+            {
+                std::ofstream f(prefix + ".prefsp_prob.csv");
+                f.precision(17);
+                for (double p : prefsp_res.P_tf) f << p << "\n";
+                std::printf("Preconditioned FSP continuous solution at tf=%.6g saved to %s.prefsp_prob.csv\n",
+                            tf, prefix.c_str());
+            }
+            {
+                std::ofstream f(prefix + ".prefsp_steps.csv");
+                f << "step,t_start,t_end,tau,d,local_states\n";
+                for (size_t s = 0; s < prefsp_res.steps.size(); ++s) {
+                    const auto& step = prefsp_res.steps[s];
+                    f << s << "," << step.t_start << "," << step.t_end << "," << step.tau
+                      << "," << step.d << "," << step.states.size() << "\n";
+                }
+                std::printf("Step trajectory metadata saved to %s.prefsp_steps.csv\n", prefix.c_str());
+            }
+        }
+
+        // Standard Algorithm 2 & 3 pipeline
+        double t = omp_get_wtime();
         StateSpace ss = generate_state_space(net);
         double t_states = omp_get_wtime() - t;
         t = omp_get_wtime();
@@ -191,7 +290,6 @@ int main(int argc, char** argv) {
             }
             {
                 std::ofstream f(prefix + ".x0.csv");
-                f.precision(17);
                 for (int i = 0; i < red_model.d; ++i) f << red_model.X0[i] << "\n";
             }
             {
