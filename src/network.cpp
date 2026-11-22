@@ -117,27 +117,51 @@ Network parse_network(const std::string& path) {
             }
         } else if (key == "initial") {
             // Parse initial population counts x0
+            // Supports both positional: "initial 3 3 0 0" and named: "initial S1 3 S2 3"
             net.x0.assign(net.species.size(), 0);
-            std::string spec;
-            int count = 0;
-            while (ls >> spec >> count) {
-                auto it = idx.find(spec);
-                if (it == idx.end()) throw std::runtime_error("unknown species in initial: " + spec);
-                net.x0[it->second] = count;
+            std::vector<std::string> tokens;
+            std::string tok;
+            while (ls >> tok) tokens.push_back(tok);
+
+            if (!tokens.empty() && std::isdigit(static_cast<unsigned char>(tokens[0][0]))) {
+                // Positional numbers
+                for (size_t i = 0; i < tokens.size() && i < net.x0.size(); ++i) {
+                    net.x0[i] = std::stoi(tokens[i]);
+                }
+            } else {
+                // Key-value pairs
+                for (size_t i = 0; i + 1 < tokens.size(); i += 2) {
+                    auto it = idx.find(tokens[i]);
+                    if (it == idx.end()) throw std::runtime_error("unknown species in initial: " + tokens[i]);
+                    net.x0[it->second] = std::stoi(tokens[i + 1]);
+                }
             }
-        } else if (key == "conservation") {
+        } else if (key == "conservation" || key == "conserve") {
             // Parse linear conservation laws C * N = b
-            std::string rest = line.substr(key.size());
-            auto eq = rest.find('=');
-            std::string lhs_s = (eq == std::string::npos) ? rest : rest.substr(0, eq);
-            auto terms = parse_side(lhs_s);
-            std::vector<int> row(net.species.size(), 0);
-            for (const auto& kv : terms) {
-                auto it = idx.find(kv.first);
-                if (it == idx.end()) throw std::runtime_error("unknown species in conservation: " + kv.first);
-                row[it->second] = kv.second;
+            // Supports both "conserve 1 0 1 1" and "conservation S1 + S3 + S4 = 3"
+            std::vector<std::string> tokens;
+            std::string tok;
+            while (ls >> tok) tokens.push_back(tok);
+
+            if (!tokens.empty() && (std::isdigit(static_cast<unsigned char>(tokens[0][0])) || tokens[0][0] == '-')) {
+                std::vector<int> row(net.species.size(), 0);
+                for (size_t i = 0; i < tokens.size() && i < net.species.size(); ++i) {
+                    row[i] = std::stoi(tokens[i]);
+                }
+                net.C.push_back(std::move(row));
+            } else {
+                std::string rest = line.substr(key.size());
+                auto eq = rest.find('=');
+                std::string lhs_s = (eq == std::string::npos) ? rest : rest.substr(0, eq);
+                auto terms = parse_side(lhs_s);
+                std::vector<int> row(net.species.size(), 0);
+                for (const auto& kv : terms) {
+                    auto it = idx.find(kv.first);
+                    if (it == idx.end()) throw std::runtime_error("unknown species in conservation: " + kv.first);
+                    row[it->second] = kv.second;
+                }
+                net.C.push_back(std::move(row));
             }
-            net.C.push_back(std::move(row));
         }
     }
 

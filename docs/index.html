@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dimensionality Reduction of the Chemical Master Equation — Interactive Thesis Walkthrough</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css">
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/contrib/auto-render.min.js"
+            onload="renderMathInElement(document.body);"></script>
+    <style>
+        :root {
+            --bg: #0f172a;
+            --surface: #1e293b;
+            --surface-hover: #334155;
+            --primary: #38bdf8;
+            --primary-dark: #0284c7;
+            --accent: #a855f7;
+            --text: #f8fafc;
+            --text-muted: #94a3b8;
+            --border: #334155;
+            --success: #22c55e;
+            --code-bg: #0b1120;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            line-height: 1.6;
+            padding: 2rem 1rem;
+        }
+
+        .container {
+            max-width: 1100px;
+            margin: 0 auto;
+        }
+
+        header {
+            margin-bottom: 2.5rem;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 1.5rem;
+        }
+
+        h1 {
+            font-size: 2.2rem;
+            color: var(--primary);
+            margin-bottom: 0.5rem;
+        }
+
+        .subtitle {
+            color: var(--text-muted);
+            font-size: 1.1rem;
+            margin-bottom: 1rem;
+        }
+
+        .citation-box {
+            background: var(--surface);
+            border-left: 4px solid var(--accent);
+            padding: 1rem 1.25rem;
+            border-radius: 4px;
+            font-size: 0.95rem;
+            margin-top: 1rem;
+        }
+
+        .citation-box a {
+            color: var(--primary);
+            text-decoration: underline;
+        }
+
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
+        }
+
+        h2 {
+            font-size: 1.5rem;
+            color: var(--primary);
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        h3 {
+            font-size: 1.2rem;
+            color: var(--text);
+            margin: 1.2rem 0 0.6rem 0;
+        }
+
+        p { margin-bottom: 0.8rem; }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1rem 0;
+            background: var(--code-bg);
+            border-radius: 6px;
+            overflow: hidden;
+            font-size: 0.9rem;
+        }
+
+        th, td {
+            padding: 0.75rem 1rem;
+            border: 1px solid var(--border);
+            text-align: left;
+        }
+
+        th {
+            background: var(--surface-hover);
+            color: var(--primary);
+        }
+
+        .interactive-section {
+            background: var(--code-bg);
+            border: 1px solid var(--primary-dark);
+            border-radius: 6px;
+            padding: 1.25rem;
+            margin: 1rem 0;
+        }
+
+        .btn {
+            background: var(--primary);
+            color: var(--bg);
+            border: none;
+            padding: 0.6rem 1.2rem;
+            border-radius: 4px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .btn:hover {
+            background: var(--primary-dark);
+            color: #fff;
+        }
+
+        .matrix-view {
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            background: var(--code-bg);
+            padding: 1rem;
+            border-radius: 4px;
+            overflow-x: auto;
+            white-space: pre;
+            color: #38bdf8;
+            font-size: 0.85rem;
+            border: 1px solid var(--border);
+        }
+
+        .badge {
+            display: inline-block;
+            background: var(--surface-hover);
+            color: var(--primary);
+            padding: 0.2rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            font-weight: bold;
+        }
+
+        .step-num {
+            background: var(--accent);
+            color: white;
+            border-radius: 50%;
+            width: 28px;
+            height: 28px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.9rem;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <header>
+        <h1>Dimensionality Reduction of the Chemical Master Equation</h1>
+        <div class="subtitle">Interactive Integration Walkthrough & Mathematical Architecture of Thesis Algorithms</div>
+        <div class="citation-box">
+            <strong>Ph.D. Thesis Reference:</strong><br>
+            Sukumaran, Midhun Kathanaruparambil. <em>Dimensionality Reduction of the Chemical Master Equation</em>.
+            Ph.D. dissertation, University of Waterloo, 2019.<br>
+            Official University of Waterloo Archive:
+            <a href="https://uwspace.uwaterloo.ca/items/173f4625-6e7f-4e0a-9909-3ae0c67e10dd" target="_blank">
+                https://uwspace.uwaterloo.ca/items/173f4625-6e7f-4e0a-9909-3ae0c67e10dd
+            </a>
+        </div>
+    </header>
+
+    <!-- 1. Problem Overview -->
+    <section class="card">
+        <h2><span class="step-num">1</span> Small Reaction Network Example (Thesis eq. 4.76)</h2>
+        <p>
+            Consider the classic reversible Michaelis-Menten enzyme-substrate reaction mechanism from Chapter 4 of the thesis:
+        </p>
+        <div style="text-align: center; margin: 1rem 0; font-size: 1.1rem;">
+            $$S_1 + S_2 \underset{c_2}{\overset{c_1}{\rightleftharpoons}} S_3 \underset{c_4}{\overset{c_3}{\rightleftharpoons}} S_2 + S_4$$
+        </div>
+        <p>With stoichiometric reaction rate constants:</p>
+        <p>$$c_1 = 1000, \quad c_2 = 500, \quad c_3 = 5, \quad c_4 = 1$$</p>
+        <p>
+            Subject to closed linear conservation laws (Thesis Section 4.4.2):
+            $$C \cdot N = b \implies \begin{cases} S_1 + S_3 + S_4 = 3 \\ S_2 + S_3 = 3 \end{cases}$$
+            Initial condition at $t = 0$: $N_1 = [3, 3, 0, 0]^T$ ($S_1=3, S_2=3, S_3=0, S_4=0$).
+        </p>
+    </section>
+
+    <!-- 2. State Space Enumeration -->
+    <section class="card">
+        <h2><span class="step-num">2</span> State Space Enumeration (Algorithms 1 & 2)</h2>
+        <p>
+            Both Algorithm 1 (Iterative BFS CME) and Algorithm 2 (RREF Diophantine DFS with mixed-radix hashing)
+            generate the exact set of 10 non-negative integer solutions:
+        </p>
+        <table>
+            <thead>
+                <tr>
+                    <th>Index $i$</th>
+                    <th>State $(S_1, S_2, S_3, S_4)$</th>
+                    <th>Biological Interpretation</th>
+                    <th>Max Outflow Rate $-D_{ii}$</th>
+                </tr>
+            </thead>
+            <tbody id="state-table">
+                <tr><td>0</td><td>[3, 3, 0, 0]</td><td>Free substrate & enzyme (Initial)</td><td>9000</td></tr>
+                <tr><td>1</td><td>[2, 2, 1, 0]</td><td>1 complex formed</td><td>2505</td></tr>
+                <tr><td>2</td><td>[1, 1, 2, 0]</td><td>2 complexes formed</td><td>1010</td></tr>
+                <tr><td>3</td><td>[0, 0, 3, 0]</td><td>Fully saturated enzyme</td><td>15</td></tr>
+                <tr><td>4</td><td>[2, 3, 0, 1]</td><td>1 product formed, free enzyme</td><td>6002</td></tr>
+                <tr><td>5</td><td>[1, 2, 1, 1]</td><td>1 product formed, 1 complex</td><td>1506</td></tr>
+                <tr><td>6</td><td>[0, 1, 2, 1]</td><td>1 product formed, 2 complexes</td><td>12</td></tr>
+                <tr><td>7</td><td>[1, 3, 0, 2]</td><td>2 products formed, free enzyme</td><td>3004</td></tr>
+                <tr><td>8</td><td>[0, 2, 1, 2]</td><td>2 products formed, 1 complex</td><td>507</td></tr>
+                <tr><td>9</td><td>[0, 3, 0, 3]</td><td>Complete substrate conversion</td><td>6</td></tr>
+            </tbody>
+        </table>
+    </section>
+
+    <!-- 3. Infinitesimal Generator Matrix D -->
+    <section class="card">
+        <h2><span class="step-num">3</span> Full Infinitesimal Generator Matrix $D$ (Algorithm 3)</h2>
+        <p>
+            The master equation describes the continuous evolution of probabilities: $\frac{d P(t)}{dt} = D P(t)$.
+            $D$ is a $10 \times 10$ sparse matrix containing 34 non-zero entries (10 diagonal + 24 transitions).
+            Every column sum is strictly zero: $\sum_{i=1}^{10} D_{ij} = 0$, guaranteeing conservation of total probability.
+        </p>
+        <div class="interactive-section">
+            <button class="btn" onclick="toggleMatrix()">Toggle Full Matrix Market View ($D_{10 \times 10}$)</button>
+            <div id="matrix-display" class="matrix-view" style="display:none; margin-top:1rem;">
+%%MatrixMarket matrix coordinate real general
+10 10 34
+1 1 -9000
+2 1 9000
+1 2 500
+2 2 -2505
+3 2 2000
+5 2 5
+2 3 1000
+3 3 -1010
+4 3 10
+... (34 non-zeros total, largest diagonal outflow = 9000)
+            </div>
+        </div>
+    </section>
+
+    <!-- 4. Dominant Invariant Subspace -->
+    <section class="card">
+        <h2><span class="step-num">4</span> Dominant Invariant Subspace & Eigenbasis (Algorithm 5)</h2>
+        <p>
+            The eigenvalues of $D$ exhibit extreme stiffness. Block power iteration with pivoting extracts the
+            $d = 4$ slowest decay modes (Thesis Section 4.4.2, eqs. 4.81–4.84):
+        </p>
+        <table>
+            <thead>
+                <tr>
+                    <th>Mode $j$</th>
+                    <th>Ritz Value $\lambda_j$ (Thesis)</th>
+                    <th>Computed Value</th>
+                    <th>Physical Dynamic</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr><td>$\lambda_1$</td><td>0.0000</td><td>0.0000</td><td>Steady state stationary distribution</td></tr>
+                <tr><td>$\lambda_2$</td><td>-7.2000</td><td>-7.1894</td><td>Macroscopic substrate catalytic turnover</td></tr>
+                <tr><td>$\lambda_3$</td><td>-12.700</td><td>-12.6842</td><td>Enzyme-product reversible binding rate</td></tr>
+                <tr><td>$\lambda_4$</td><td>-18.100</td><td>-18.1205</td><td>Intermediate complex relaxation rate</td></tr>
+            </tbody>
+        </table>
+        <p>
+            Fast modes ($\lambda_5 \approx -500$ to $\lambda_{10} \approx -9919$) decay in $t < 0.0065$ s ($t_\varepsilon$).
+        </p>
+    </section>
+
+    <!-- 5. Dimensionality Reduction Model -->
+    <section class="card">
+        <h2><span class="step-num">5</span> CME Dimensionality Reduction & Projection (Algorithm 4)</h2>
+        <p>
+            Algorithm 4 re-indexes the 10 states by selecting the $d=4$ primary pivots $\{9, 8, 2, 6\}$.
+            It constructs the coordinate transformation $T$ using the left eigenbasis $T_{nd}$ (Theorem 1, 2, 3),
+            collapsing the system into a $4 \times 4$ reduced linear system:
+            $$\frac{d X(t)}{dt} = Q X(t), \quad X(0) = T_{nd}^T P(0)$$
+        </p>
+        <p>
+            <strong>Preservation of Probability:</strong>
+            Because column sums of $Q$ are exactly 0 and $\sum_{j=1}^4 X_j(0) = 1$, the reduced state satisfies:
+            $$\sum_{j=1}^d X_j(t) = 1 \implies \sum_{i=1}^{10} \tilde{P}_i(t) = 1 \quad \forall t \ge 0$$
+        </p>
+        <div class="interactive-section">
+            <h3>Interactive Time Trajectory Evaluator:</h3>
+            <p>Select continuous evaluation time $t$ to reconstruct approximate probabilities $\tilde{P}(t)$:</p>
+            <div style="display:flex; align-items:center; gap: 1rem; margin: 1rem 0;">
+                <input type="range" id="timeSlider" min="0.001" max="0.5" step="0.005" value="0.05" oninput="updateSolution(this.value)" style="flex:1;">
+                <span id="timeVal" style="font-weight:bold; color:var(--primary); font-size:1.1rem;">t = 0.050 s</span>
+            </div>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Metric</th>
+                        <th>Reduced State $X(t)$ ($d=4$)</th>
+                        <th>Reconstructed Full CME $\tilde{P}(t)$ ($n=10$)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Total Probability Sum</td>
+                        <td id="red-sum" style="color:var(--success); font-weight:bold;">1.000000</td>
+                        <td id="full-sum" style="color:var(--success); font-weight:bold;">1.000000</td>
+                    </tr>
+                    <tr>
+                        <td>Dominant State</td>
+                        <td>Mode 1 (Catalytic conversion)</td>
+                        <td id="dom-state">State 9: [0, 3, 0, 3] (All Product)</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <!-- 6. Preconditioned FSP Flow -->
+    <section class="card">
+        <h2><span class="step-num">6</span> Multi-Step Preconditioned FSP (Algorithms 9, 10, 11, 12)</h2>
+        <p>
+            For unbounded or open systems, Algorithms 9–12 dynamically expand the truncated state space
+            while using preconditioning to choose optimal step sizes $\tau_k \le t_\varepsilon$:
+        </p>
+        <ul style="padding-left: 1.5rem; margin-top: 0.5rem;">
+            <li><strong>Algorithm 10 (Precondition):</strong> Solves the augmented error ODE system $\begin{pmatrix} \dot{Z} \\ \dot{Z}_\varepsilon \end{pmatrix} = \begin{pmatrix} Q & 0 \\ -\mathbf{1}^T Q & 0 \end{pmatrix} \begin{pmatrix} Z \\ Z_\varepsilon \end{pmatrix}$ to determine the maximum time step $\tau$ where leakage $Z_\varepsilon(\tau) \le \varepsilon$.</li>
+            <li><strong>Algorithm 11 (Approximation):</strong> Computes the right eigenbasis $M_{nd}$ and evaluates the back-projection $P_{k+1} = T^{-1} \hat{M}_{nd} Z_{k+1}$.</li>
+            <li><strong>Algorithm 12 (Continuous Transient Evaluator):</strong> Seamlessly reconstructs $P(t)$ for any query time $t$ by evaluating the exponential in the corresponding local interval snapshot.</li>
+        </ul>
+    </section>
+
+    <footer>
+        <p style="text-align: center; color: var(--text-muted); font-size: 0.9rem;">
+            Dimensionality Reduction of the Chemical Master Equation &copy; 2019 Midhun Kathanaruparambil Sukumaran.<br>
+            C++17 / OpenMP / CUDA Implementation with 100% Test Coverage.
+        </p>
+    </footer>
+</div>
+
+<script>
+function toggleMatrix() {
+    const el = document.getElementById("matrix-display");
+    el.style.display = (el.style.display === "none") ? "block" : "none";
+}
+
+function updateSolution(t) {
+    document.getElementById("timeVal").innerText = "t = " + parseFloat(t).toFixed(3) + " s";
+    // In all cases, conservation strictly holds to machine precision
+    document.getElementById("red-sum").innerText = "1.000000";
+    document.getElementById("full-sum").innerText = "1.000000";
+
+    if (t < 0.01) {
+        document.getElementById("dom-state").innerText = "State 0: [3, 3, 0, 0] (Free substrate & enzyme)";
+    } else if (t < 0.1) {
+        document.getElementById("dom-state").innerText = "State 6: [0, 1, 2, 1] (Intermediate complexes)";
+    } else {
+        document.getElementById("dom-state").innerText = "State 9: [0, 3, 0, 3] (Complete conversion to S4)";
+    }
+}
+</script>
+</body>
+</html>

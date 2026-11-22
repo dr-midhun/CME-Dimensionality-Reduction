@@ -45,22 +45,27 @@ ifeq ($(GPU),1)
 endif
 
 BUILD := build
-all: $(BUILD)/cme_cli $(BUILD)/test_small
+all: $(BUILD)/cme_cli $(BUILD)/test_small $(BUILD)/test_exhaustive
 
 $(BUILD)/cme_cli: apps/cme_cli.cpp $(SRC) | $(BUILD)
 	$(CXX) $(CXXFLAGS) $(INC) $^ -o $@ $(LDLIBS)
 $(BUILD)/test_small: tests/test_small.cpp $(SRC) | $(BUILD)
 	$(CXX) $(CXXFLAGS) $(INC) $^ -o $@ $(LDLIBS)
+$(BUILD)/test_exhaustive: tests/test_exhaustive.cpp $(SRC) | $(BUILD)
+	$(CXX) $(CXXFLAGS) $(INC) $^ -o $@ $(LDLIBS)
 $(BUILD):
 	mkdir -p $(BUILD)
 
-test: $(BUILD)/test_small
+test: $(BUILD)/test_small $(BUILD)/test_exhaustive
 	./$(BUILD)/test_small
+	./$(BUILD)/test_exhaustive
 
 # Runs the GPU code path against a CPU mock of cuBLAS/cuSPARSE (logic check only, no GPU needed).
-test-gpu-logic: tests/test_small.cpp $(SRC) src/alg5_eigenbasis_cuda.cpp tests/mock_cuda/mock.cpp | $(BUILD)
-	$(CXX) $(CXXFLAGS) -DCME_WITH_CUDA -Itests/mock_cuda -Iinclude $^ -o $(BUILD)/test_gpu_logic $(LDLIBS)
+test-gpu-logic: tests/test_small.cpp tests/test_exhaustive.cpp $(SRC) src/alg5_eigenbasis_cuda.cpp tests/mock_cuda/mock.cpp | $(BUILD)
+	$(CXX) $(CXXFLAGS) -DCME_WITH_CUDA -Itests/mock_cuda -Iinclude tests/test_small.cpp $(SRC) src/alg5_eigenbasis_cuda.cpp tests/mock_cuda/mock.cpp -o $(BUILD)/test_gpu_logic $(LDLIBS)
+	$(CXX) $(CXXFLAGS) -DCME_WITH_CUDA -Itests/mock_cuda -Iinclude tests/test_exhaustive.cpp $(SRC) src/alg5_eigenbasis_cuda.cpp tests/mock_cuda/mock.cpp -o $(BUILD)/test_gpu_exhaustive $(LDLIBS)
 	./$(BUILD)/test_gpu_logic gpu
+	./$(BUILD)/test_gpu_exhaustive gpu
 clean:
 	rm -rf $(BUILD)
 
