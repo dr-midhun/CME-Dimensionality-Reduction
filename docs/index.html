@@ -7,7 +7,7 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css">
     <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/contrib/auto-render.min.js"
-            onload="renderMathInElement(document.body);"></script>
+            onload="initKaTeX();"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         :root {
@@ -221,6 +221,77 @@
             border: 1px solid;
             transition: all 0.25s ease;
         }
+
+        .matrix-table {
+            border-collapse: collapse;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            font-size: 0.78rem;
+            width: 100%;
+            margin: 0.5rem 0;
+            background: var(--code-bg);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+        }
+
+        .matrix-table th, .matrix-table td {
+            padding: 0.5rem 0.4rem;
+            text-align: center;
+            border: 1px solid rgba(51, 65, 85, 0.6);
+            white-space: nowrap;
+        }
+
+        .matrix-table th {
+            background: var(--surface);
+            color: var(--primary);
+            font-weight: 600;
+        }
+
+        .matrix-diag {
+            background: rgba(225, 29, 72, 0.2);
+            color: #fb7185;
+            font-weight: bold;
+        }
+
+        .matrix-nonzero {
+            background: rgba(56, 189, 248, 0.15);
+            color: #38bdf8;
+            font-weight: 600;
+        }
+
+        .matrix-zero {
+            color: #475569;
+        }
+
+        .matrix-colsum {
+            background: rgba(34, 197, 94, 0.18);
+            color: #4ade80;
+            font-weight: bold;
+        }
+
+        .tab-btn {
+            background: var(--surface);
+            color: var(--text-muted);
+            border: 1px solid var(--border);
+            padding: 0.45rem 0.9rem;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 500;
+            font-size: 0.85rem;
+            transition: all 0.2s ease;
+        }
+
+        .tab-btn:hover {
+            background: var(--surface-hover);
+            color: var(--text);
+            border-color: var(--primary);
+        }
+
+        .tab-btn.active {
+            background: var(--primary);
+            color: var(--bg);
+            border-color: var(--primary);
+            font-weight: 600;
+        }
     </style>
 </head>
 <body>
@@ -274,16 +345,16 @@
                 </tr>
             </thead>
             <tbody id="state-table">
-                <tr><td>0</td><td>[3, 3, 0, 0]</td><td>Free substrate & enzyme (Initial)</td><td>9000</td></tr>
-                <tr><td>1</td><td>[2, 2, 1, 0]</td><td>1 complex formed</td><td>2505</td></tr>
-                <tr><td>2</td><td>[1, 1, 2, 0]</td><td>2 complexes formed</td><td>1010</td></tr>
-                <tr><td>3</td><td>[0, 0, 3, 0]</td><td>Fully saturated enzyme</td><td>15</td></tr>
-                <tr><td>4</td><td>[2, 3, 0, 1]</td><td>1 product formed, free enzyme</td><td>6002</td></tr>
-                <tr><td>5</td><td>[1, 2, 1, 1]</td><td>1 product formed, 1 complex</td><td>1506</td></tr>
-                <tr><td>6</td><td>[0, 1, 2, 1]</td><td>1 product formed, 2 complexes</td><td>12</td></tr>
-                <tr><td>7</td><td>[1, 3, 0, 2]</td><td>2 products formed, free enzyme</td><td>3004</td></tr>
-                <tr><td>8</td><td>[0, 2, 1, 2]</td><td>2 products formed, 1 complex</td><td>507</td></tr>
-                <tr><td>9</td><td>[0, 3, 0, 3]</td><td>Complete substrate conversion</td><td>6</td></tr>
+                <tr><td>0</td><td>[3, 3, 0, 0]</td><td>Free substrate &amp; enzyme (Initial)</td><td>9000</td></tr>
+                <tr><td>1</td><td>[2, 2, 1, 0]</td><td>1 complex formed</td><td>4505</td></tr>
+                <tr><td>2</td><td>[1, 1, 2, 0]</td><td>2 complexes formed</td><td>2010</td></tr>
+                <tr><td>3</td><td>[0, 0, 3, 0]</td><td>Fully saturated enzyme</td><td>1515</td></tr>
+                <tr><td>4</td><td>[2, 3, 0, 1]</td><td>1 product formed, free enzyme</td><td>6003</td></tr>
+                <tr><td>5</td><td>[1, 2, 1, 1]</td><td>1 product formed, 1 complex</td><td>2507</td></tr>
+                <tr><td>6</td><td>[0, 1, 2, 1]</td><td>1 product formed, 2 complexes</td><td>1011</td></tr>
+                <tr><td>7</td><td>[1, 3, 0, 2]</td><td>2 products formed, free enzyme</td><td>3006</td></tr>
+                <tr><td>8</td><td>[0, 2, 1, 2]</td><td>2 products formed, 1 complex</td><td>509</td></tr>
+                <tr><td>9</td><td>[0, 3, 0, 3]</td><td>Complete substrate conversion</td><td>9</td></tr>
             </tbody>
         </table>
     </section>
@@ -293,24 +364,259 @@
         <h2><span class="step-num">3</span> Full Infinitesimal Generator Matrix $D$ (Algorithm 3)</h2>
         <p>
             The master equation describes the continuous evolution of probabilities: $\frac{d P(t)}{dt} = D P(t)$.
-            $D$ is a $10 \times 10$ sparse matrix containing 34 non-zero entries (10 diagonal + 24 transitions).
-            Every column sum is strictly zero: $\sum_{i=1}^{10} D_{ij} = 0$, guaranteeing conservation of total probability.
+            $D$ is a $10 \times 10$ sparse infinitesimal generator containing 34 non-zero entries (10 diagonal outflow rates + 24 state-to-state transition propensities).
+            Every column sum is strictly zero: $\sum_{i=1}^{10} D_{ij} = 0$, guaranteeing conservation of total probability $\mathbf{1}^T D = \mathbf{0}^T$.
         </p>
-        <div class="interactive-section">
-            <button class="btn" onclick="toggleMatrix()">Toggle Full Matrix Market View ($D_{10 \times 10}$)</button>
-            <div id="matrix-display" class="matrix-view" style="display:none; margin-top:1rem;">
+
+        <!-- View Switcher Tabs -->
+        <div style="display:flex; gap:0.5rem; flex-wrap:wrap; margin: 1.25rem 0 0.75rem 0;">
+            <button class="tab-btn active" id="tab-grid" onclick="switchMatrixView('grid')">2D Formatted Grid Matrix</button>
+            <button class="tab-btn" id="tab-latex" onclick="switchMatrixView('latex')">Compiled LaTeX Matrix</button>
+            <button class="tab-btn" id="tab-raw" onclick="switchMatrixView('raw')">Matrix Market Raw Coordinate (.D.mtx)</button>
+        </div>
+
+        <!-- 1. 2D Formatted Grid View -->
+        <div id="view-grid" style="display:block;">
+            <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:0.6rem;">
+                <span style="display:inline-block; width:12px; height:12px; background:rgba(225,29,72,0.25); border:1px solid #fb7185; border-radius:2px; vertical-align:middle; margin-right:4px;"></span> Red: Diagonal outflow rates (&minus;<em>D</em><sub><em>ii</em></sub>) &nbsp;|&nbsp;
+                <span style="display:inline-block; width:12px; height:12px; background:rgba(56,189,248,0.25); border:1px solid #38bdf8; border-radius:2px; vertical-align:middle; margin-right:4px;"></span> Blue: Off-diagonal transition rates (<em>D</em><sub><em>ij</em></sub> &gt; 0) &nbsp;|&nbsp;
+                <span style="display:inline-block; width:12px; height:12px; background:rgba(34,197,94,0.25); border:1px solid #22c55e; border-radius:2px; vertical-align:middle; margin-right:4px;"></span> Green: Column sums = 0
+            </p>
+            <div style="overflow-x:auto; background:var(--code-bg); padding:0.75rem; border-radius:6px; border:1px solid var(--border);">
+                <table class="matrix-table">
+                    <thead>
+                        <tr>
+                            <th style="min-width:65px;"><em>D</em> [i \ j]</th>
+                            <th>j = 0<br><span style="font-size:0.68rem; color:var(--text-muted);">[3,3,0,0]</span></th>
+                            <th>j = 1<br><span style="font-size:0.68rem; color:var(--text-muted);">[2,2,1,0]</span></th>
+                            <th>j = 2<br><span style="font-size:0.68rem; color:var(--text-muted);">[1,1,2,0]</span></th>
+                            <th>j = 3<br><span style="font-size:0.68rem; color:var(--text-muted);">[0,0,3,0]</span></th>
+                            <th>j = 4<br><span style="font-size:0.68rem; color:var(--text-muted);">[2,3,0,1]</span></th>
+                            <th>j = 5<br><span style="font-size:0.68rem; color:var(--text-muted);">[1,2,1,1]</span></th>
+                            <th>j = 6<br><span style="font-size:0.68rem; color:var(--text-muted);">[0,1,2,1]</span></th>
+                            <th>j = 7<br><span style="font-size:0.68rem; color:var(--text-muted);">[1,3,0,2]</span></th>
+                            <th>j = 8<br><span style="font-size:0.68rem; color:var(--text-muted);">[0,2,1,2]</span></th>
+                            <th>j = 9<br><span style="font-size:0.68rem; color:var(--text-muted);">[0,3,0,3]</span></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Row 0 -->
+                        <tr>
+                            <th>i = 0</th>
+                            <td class="matrix-diag">-9000</td>
+                            <td class="matrix-nonzero">500</td>
+                            <td class="matrix-zero">&middot;</td>
+                            <td class="matrix-zero">&middot;</td>
+                            <td class="matrix-zero">&middot;</td>
+                            <td class="matrix-zero">&middot;</td>
+                            <td class="matrix-zero">&middot;</td>
+                            <td class="matrix-zero">&middot;</td>
+                            <td class="matrix-zero">&middot;</td>
+                            <td class="matrix-zero">&middot;</td>
+                        </tr>
+                        <!-- Row 1 -->
+                        <tr>
+                            <th>i = 1</th>
+                            <td class="matrix-nonzero">9000</td>
+                            <td class="matrix-diag">-4505</td>
+                            <td class="matrix-nonzero">1000</td>
+                            <td class="matrix-zero">&middot;</td>
+                            <td class="matrix-nonzero">3</td>
+                            <td class="matrix-zero">&middot;</td>
+                            <td class="matrix-zero">&middot;</td>
+                            <td class="matrix-zero">&middot;</td>
+                            <td class="matrix-zero">&middot;</td>
+                            <td class="matrix-zero">&middot;</td>
+                        </tr>
+                        <!-- Row 2 -->
+                        <tr>
+                            <th>i = 2</th>
+                            <td class="matrix-zero">&middot;</td>
+                            <td class="matrix-nonzero">4000</td>
+                            <td class="matrix-diag">-2010</td>
+                            <td class="matrix-nonzero">1500</td>
+                            <td class="matrix-zero">&middot;</td>
+                            <td class="matrix-nonzero">2</td>
+                            <td class="matrix-zero">&middot;</td>
+                            <td class="matrix-zero">&middot;</td>
+                            <td class="matrix-zero">&middot;</td>
+                            <td class="matrix-zero">&middot;</td>
+                        </tr>
+                        <!-- Row 3 -->
+                        <tr>
+                            <th>i = 3</th>
+                            <td class="matrix-zero">&middot;</td>
+                            <td class="matrix-zero">&middot;</td>
+                            <td class="matrix-nonzero">1000</td>
+                            <td class="matrix-diag">-1515</td>
+                            <td class="matrix-zero">&middot;</td>
+                            <td class="matrix-zero">&middot;</td>
+                            <td class="matrix-nonzero">1</td>
+                            <td class="matrix-zero">&middot;</td>
+                            <td class="matrix-zero">&middot;</td>
+                            <td class="matrix-zero">&middot;</td>
+                        </tr>
+                        <!-- Row 4 -->
+                        <tr>
+                            <th>i = 4</th>
+                            <td class="matrix-zero">&middot;</td>
+                            <td class="matrix-nonzero">5</td>
+                            <td class="matrix-zero">&middot;</td>
+                            <td class="matrix-zero">&middot;</td>
+                            <td class="matrix-diag">-6003</td>
+                            <td class="matrix-nonzero">500</td>
+                            <td class="matrix-zero">&middot;</td>
+                            <td class="matrix-zero">&middot;</td>
+                            <td class="matrix-zero">&middot;</td>
+                            <td class="matrix-zero">&middot;</td>
+                        </tr>
+                        <!-- Row 5 -->
+                        <tr>
+                            <th>i = 5</th>
+                            <td class="matrix-zero">&middot;</td>
+                            <td class="matrix-zero">&middot;</td>
+                            <td class="matrix-nonzero">10</td>
+                            <td class="matrix-zero">&middot;</td>
+                            <td class="matrix-nonzero">6000</td>
+                            <td class="matrix-diag">-2507</td>
+                            <td class="matrix-nonzero">1000</td>
+                            <td class="matrix-nonzero">6</td>
+                            <td class="matrix-zero">&middot;</td>
+                            <td class="matrix-zero">&middot;</td>
+                        </tr>
+                        <!-- Row 6 -->
+                        <tr>
+                            <th>i = 6</th>
+                            <td class="matrix-zero">&middot;</td>
+                            <td class="matrix-zero">&middot;</td>
+                            <td class="matrix-zero">&middot;</td>
+                            <td class="matrix-nonzero">15</td>
+                            <td class="matrix-zero">&middot;</td>
+                            <td class="matrix-nonzero">2000</td>
+                            <td class="matrix-diag">-1011</td>
+                            <td class="matrix-zero">&middot;</td>
+                            <td class="matrix-nonzero">4</td>
+                            <td class="matrix-zero">&middot;</td>
+                        </tr>
+                        <!-- Row 7 -->
+                        <tr>
+                            <th>i = 7</th>
+                            <td class="matrix-zero">&middot;</td>
+                            <td class="matrix-zero">&middot;</td>
+                            <td class="matrix-zero">&middot;</td>
+                            <td class="matrix-zero">&middot;</td>
+                            <td class="matrix-zero">&middot;</td>
+                            <td class="matrix-nonzero">5</td>
+                            <td class="matrix-zero">&middot;</td>
+                            <td class="matrix-diag">-3006</td>
+                            <td class="matrix-nonzero">500</td>
+                            <td class="matrix-zero">&middot;</td>
+                        </tr>
+                        <!-- Row 8 -->
+                        <tr>
+                            <th>i = 8</th>
+                            <td class="matrix-zero">&middot;</td>
+                            <td class="matrix-zero">&middot;</td>
+                            <td class="matrix-zero">&middot;</td>
+                            <td class="matrix-zero">&middot;</td>
+                            <td class="matrix-zero">&middot;</td>
+                            <td class="matrix-zero">&middot;</td>
+                            <td class="matrix-nonzero">10</td>
+                            <td class="matrix-nonzero">3000</td>
+                            <td class="matrix-diag">-509</td>
+                            <td class="matrix-nonzero">9</td>
+                        </tr>
+                        <!-- Row 9 -->
+                        <tr>
+                            <th>i = 9</th>
+                            <td class="matrix-zero">&middot;</td>
+                            <td class="matrix-zero">&middot;</td>
+                            <td class="matrix-zero">&middot;</td>
+                            <td class="matrix-zero">&middot;</td>
+                            <td class="matrix-zero">&middot;</td>
+                            <td class="matrix-zero">&middot;</td>
+                            <td class="matrix-zero">&middot;</td>
+                            <td class="matrix-zero">&middot;</td>
+                            <td class="matrix-nonzero">5</td>
+                            <td class="matrix-diag">-9</td>
+                        </tr>
+                    </tbody>
+                    <tfoot>
+                        <tr>
+                            <th style="color:#22c55e;">&sum;<sub>i</sub> D<sub>ij</sub></th>
+                            <td class="matrix-colsum">0</td>
+                            <td class="matrix-colsum">0</td>
+                            <td class="matrix-colsum">0</td>
+                            <td class="matrix-colsum">0</td>
+                            <td class="matrix-colsum">0</td>
+                            <td class="matrix-colsum">0</td>
+                            <td class="matrix-colsum">0</td>
+                            <td class="matrix-colsum">0</td>
+                            <td class="matrix-colsum">0</td>
+                            <td class="matrix-colsum">0</td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        </div>
+
+        <!-- 2. Compiled LaTeX Matrix View -->
+        <div id="view-latex" style="display:none; overflow-x:auto; background:var(--code-bg); padding:1.25rem; border-radius:6px; border:1px solid var(--border); text-align:center;">
+            <div style="font-size:0.85rem; margin:0.5rem 0; overflow-x:auto;">
+                $$D = \begin{pmatrix}
+                -9000 & 500 & 0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 \\
+                9000 & -4505 & 1000 & 0 & 3 & 0 & 0 & 0 & 0 & 0 \\
+                0 & 4000 & -2010 & 1500 & 0 & 2 & 0 & 0 & 0 & 0 \\
+                0 & 0 & 1000 & -1515 & 0 & 0 & 1 & 0 & 0 & 0 \\
+                0 & 5 & 0 & 0 & -6003 & 500 & 0 & 0 & 0 & 0 \\
+                0 & 0 & 10 & 0 & 6000 & -2507 & 1000 & 6 & 0 & 0 \\
+                0 & 0 & 0 & 15 & 0 & 2000 & -1011 & 0 & 4 & 0 \\
+                0 & 0 & 0 & 0 & 0 & 5 & 0 & -3006 & 500 & 0 \\
+                0 & 0 & 0 & 0 & 0 & 0 & 10 & 3000 & -509 & 9 \\
+                0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 & 5 & -9
+                \end{pmatrix}$$
+            </div>
+        </div>
+
+        <!-- 3. Raw Coordinate MatrixMarket View -->
+        <div id="view-raw" style="display:none;">
+            <div class="matrix-view">
 %%MatrixMarket matrix coordinate real general
 10 10 34
 1 1 -9000
-2 1 9000
 1 2 500
-2 2 -2505
-3 2 2000
-5 2 5
+2 1 9000
+2 2 -4505
 2 3 1000
-3 3 -1010
-4 3 10
-... (34 non-zeros total, largest diagonal outflow = 9000)
+2 5 3
+3 2 4000
+3 3 -2010
+3 4 1500
+3 6 2
+4 3 1000
+4 4 -1515
+4 7 1
+5 2 5
+5 5 -6003
+5 6 500
+6 3 10
+6 5 6000
+6 6 -2507
+6 7 1000
+6 8 6
+7 4 15
+7 6 2000
+7 7 -1011
+7 9 4
+8 6 5
+8 8 -3006
+8 9 500
+9 7 10
+9 8 3000
+9 9 -509
+9 10 9
+10 9 5
+10 10 -9
             </div>
         </div>
     </section>
@@ -501,9 +807,35 @@
 </div>
 
 <script>
-function toggleMatrix() {
-    const el = document.getElementById("matrix-display");
-    el.style.display = (el.style.display === "none") ? "block" : "none";
+function initKaTeX() {
+    if (typeof renderMathInElement === "function") {
+        renderMathInElement(document.body, {
+            delimiters: [
+                {left: '$$', right: '$$', display: true},
+                {left: '$', right: '$', display: false},
+                {left: '\\(', right: '\\)', display: false},
+                {left: '\\[', right: '\\]', display: true}
+            ],
+            throwOnError: false,
+            ignoredTags: ["script", "noscript", "style", "textarea", "pre", "code", "option"]
+        });
+    }
+}
+window.addEventListener('DOMContentLoaded', initKaTeX);
+window.addEventListener('load', initKaTeX);
+
+function switchMatrixView(view) {
+    document.getElementById("view-grid").style.display = (view === 'grid') ? 'block' : 'none';
+    document.getElementById("view-latex").style.display = (view === 'latex') ? 'block' : 'none';
+    document.getElementById("view-raw").style.display = (view === 'raw') ? 'block' : 'none';
+
+    document.getElementById("tab-grid").classList.toggle('active', view === 'grid');
+    document.getElementById("tab-latex").classList.toggle('active', view === 'latex');
+    document.getElementById("tab-raw").classList.toggle('active', view === 'raw');
+
+    if (view === 'latex') {
+        initKaTeX();
+    }
 }
 
 // Compute analytical probabilities based on Michaelis-Menten 4 dominant modes:
