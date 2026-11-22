@@ -1,5 +1,8 @@
 # Dimensionality Reduction of the Chemical Master Equation
 
+> **Interactive Walkthrough & Live Demo (GitHub Pages):**  
+> [https://dr-midhun.github.io/CME-Dimensionality-Reduction/](https://dr-midhun.github.io/CME-Dimensionality-Reduction/)
+
 C++17 / OpenMP / CUDA implementation of the Chemical Master Equation (CME) pipeline and dimensionality reduction algorithms based on the Ph.D. thesis:
 > **Dimensionality Reduction of the Chemical Master Equation**  
 > Midhun Kathanaruparambil Sukumaran (University of Waterloo, 2019)  
