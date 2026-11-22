@@ -1,0 +1,14 @@
+.git
+.github
+.gitignore
+.DS_Store
+*/.DS_Store
+build/
+build*/
+out*
+*.bin
+*.mtx
+*.csv
+*.txt
+*.o
+.gemini

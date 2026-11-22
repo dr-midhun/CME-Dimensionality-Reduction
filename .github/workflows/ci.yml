@@ -31,6 +31,11 @@ jobs:
           cmake --build build-cmake -j$(nproc)
           ctest --test-dir build-cmake --output-on-failure
 
+      - name: Build and test Docker container
+        run: |
+          docker build -t cme:latest .
+          docker run --rm --entrypoint test_exhaustive cme:latest
+
   macos:
     name: macOS (Apple Clang)
     runs-on: macos-latest

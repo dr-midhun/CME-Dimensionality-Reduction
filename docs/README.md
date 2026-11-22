@@ -72,6 +72,23 @@ ctest --test-dir build
 ```
 *(On macOS, if CMake does not find OpenMP automatically: `cmake -B build -DOpenMP_ROOT=$(brew --prefix libomp)`)*
 
+### Docker (Linux Container)
+For an isolated, reproducible containerized Linux environment with OpenMP and LAPACK:
+```bash
+# Build Docker image
+docker build -t cme .
+
+# Run all unit and integration tests inside container
+docker run --rm --entrypoint test_exhaustive cme
+
+# Run CME CLI calculation with local volume mount
+docker run --rm -v $(pwd):/cme/data -w /cme/data cme examples/michaelis_menten.net --d 4 --reduce --out out/mm
+
+# Alternatively, via docker-compose or helper script:
+docker compose up test
+./utils/docker_run.sh cli examples/michaelis_menten.net --d 4 --reduce
+```
+
 ## Use
 ```bash
 ./build/cme_cli examples/michaelis_menten.net --d 4 --dump-matrix --out mm

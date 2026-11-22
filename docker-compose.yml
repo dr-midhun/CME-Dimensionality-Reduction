@@ -1,0 +1,42 @@
+version: '3.8'
+
+services:
+  # CME CLI service: execute master equation calculations and dimensionality reduction
+  cme:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - ./examples:/cme/examples:ro
+      - ./out:/cme/out
+    command: ["examples/michaelis_menten.net", "--d", "4", "--reduce", "--out", "out/mm"]
+
+  # Full automated test suite across all 12 thesis algorithms
+  test:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        echo "========================================================"
+        echo "Running Unit and Integration Tests inside Linux Docker..."
+        echo "========================================================"
+        test_small
+        echo ""
+        test_exhaustive
+        echo ""
+        echo "Running GPU mock logic verification..."
+        test_gpu_logic gpu
+        test_gpu_exhaustive gpu
+        echo "All Docker test suites completed successfully!"
+
+  # Dense NumPy / SciPy eigensolver cross-validation
+  verify:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - ./out:/cme/out:ro
+    entrypoint: ["python3", "utils/verify.py"]
+    command: ["out/mm", "--d", "4"]

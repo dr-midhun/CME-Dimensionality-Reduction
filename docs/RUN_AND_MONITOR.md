@@ -165,3 +165,48 @@ For stiff systems where reaction rate constants differ by orders of magnitude (e
 ./build/cme_cli examples/michaelis_menten.net --preconditioned-fsp --d 4 --t0 0.0 --tf 0.5 --eps 1e-4 --t-eps 0.01 --out prefsp
 ```
 Outputs continuous trajectory snapshots to `prefsp.prefsp_steps.csv` and final state probability vector to `prefsp.prefsp_prob.csv`.
+
+---
+
+## 8. Docker (Linux Container) Implementation
+
+A multi-stage Linux Docker configuration based on Ubuntu 22.04 LTS is provided for reproducible containerized execution with GCC, OpenMP, and LAPACK.
+
+### Building the Image
+```bash
+docker build -t cme:latest .
+```
+During the build phase, the multi-stage `builder` compiles the library, executes `test_small`, `test_exhaustive`, and the GPU mock tests, ensuring only a clean and mathematically verified image is produced.
+
+### Running Tests in Container
+```bash
+# Run unit and integration tests:
+docker run --rm --entrypoint test_small cme:latest
+docker run --rm --entrypoint test_exhaustive cme:latest
+
+# Run GPU mock logic tests:
+docker run --rm --entrypoint test_gpu_logic cme:latest gpu
+docker run --rm --entrypoint test_gpu_exhaustive cme:latest gpu
+```
+
+### Running CME Calculations
+Mount your current directory or data directory into `/cme/data`:
+```bash
+docker run --rm -v $(pwd):/cme/data -w /cme/data cme:latest examples/michaelis_menten.net --d 4 --reduce --out out/mm
+```
+
+### Docker Compose
+Predefined services are available in `docker-compose.yml`:
+* `docker compose up test`: Executes the complete test suite.
+* `docker compose up cme`: Runs a Michaelis-Menten reduction calculation and saves output to `./out`.
+* `docker compose up verify`: Runs dense NumPy/SciPy eigensolver verification on the generated output.
+
+### Convenience Runner Script
+You can also use `./utils/docker_run.sh`:
+```bash
+./utils/docker_run.sh build
+./utils/docker_run.sh test
+./utils/docker_run.sh cli examples/michaelis_menten.net --d 4 --reduce
+./utils/docker_run.sh compose test
+./utils/docker_run.sh shell
+```
