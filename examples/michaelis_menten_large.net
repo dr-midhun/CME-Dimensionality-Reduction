@@ -1,0 +1,9 @@
+# Michaelis-Menten mechanism, thesis eq. (4.76):
+#   S1 + S2 <-> S3 <-> S2 + S4   with c = 1000, 500, 5, 1
+# Larger population: n = (a+1)(a+2)/2 states for "initial a a 0 0" (a=2000 -> 2,003,001 states).
+species S1 S2 S3 S4
+reversible 1000 500 : S1 + S2 <-> S3
+reversible 5 1      : S3 <-> S2 + S4
+conserve 1 0 1 1
+conserve 0 1 1 0
+initial 2000 2000 0 0

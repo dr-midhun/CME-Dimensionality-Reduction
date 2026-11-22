@@ -1,0 +1,9 @@
+# Michaelis-Menten mechanism, thesis eq. (4.76):
+#   S1 + S2 <-> S3 <-> S2 + S4   with c = 1000, 500, 5, 1
+# Conservation: S1+S3+S4 = 3, S2+S3 = 3  ->  10 states (thesis eq. 4.77)
+species S1 S2 S3 S4
+reversible 1000 500 : S1 + S2 <-> S3
+reversible 5 1      : S3 <-> S2 + S4
+conserve 1 0 1 1
+conserve 0 1 1 0
+initial 3 3 0 0

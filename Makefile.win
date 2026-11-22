@@ -1,0 +1,35 @@
+# Makefile for Windows (nmake) using Microsoft Visual C++ (MSVC)
+# Run from "x64 Native Tools Command Prompt for VS"
+#
+# Usage:
+#   nmake -f Makefile.win              (CPU build)
+#   nmake -f Makefile.win test         (Run small test suite)
+#   nmake -f Makefile.win clean        (Clean build files)
+
+CXX      = cl
+CXXFLAGS = /O2 /std:c++17 /openmp /W3 /EHsc /MD /nologo
+INC      = /Iinclude
+SRC      = src\network.cpp src\state_space.cpp src\transition.cpp src\eigenbasis.cpp src\eigenbasis_cpu.cpp
+BUILD    = build
+
+all: $(BUILD)\cme_cli.exe $(BUILD)\test_small.exe
+
+$(BUILD)\cme_cli.exe: apps\cme_cli.cpp $(SRC) | $(BUILD)
+	$(CXX) $(CXXFLAGS) $(INC) apps\cme_cli.cpp $(SRC) /Fe:$@
+
+$(BUILD)\test_small.exe: tests\test_small.cpp $(SRC) | $(BUILD)
+	$(CXX) $(CXXFLAGS) $(INC) tests\test_small.cpp $(SRC) /Fe:$@
+
+$(BUILD):
+	if not exist $(BUILD) mkdir $(BUILD)
+
+test: $(BUILD)\test_small.exe
+	$(BUILD)\test_small.exe
+
+clean:
+	if exist $(BUILD) rmdir /s /q $(BUILD)
+	if exist *.obj del /q *.obj
+
+init:
+	call utils\setup_prereqs.bat
+
