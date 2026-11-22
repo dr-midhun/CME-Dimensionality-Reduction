@@ -10,6 +10,12 @@
 namespace cme {
 namespace {
 
+/**
+ * @brief Trims leading and trailing whitespace characters from a string.
+ *
+ * @param s Input string.
+ * @return Trimmed substring.
+ */
 std::string trim(const std::string& s) {
     size_t a = 0, b = s.size();
     while (a < b && std::isspace(static_cast<unsigned char>(s[a]))) ++a;
@@ -17,46 +23,79 @@ std::string trim(const std::string& s) {
     return s.substr(a, b - a);
 }
 
-// "2 S1 + S2" -> {S1:2, S2:1};  "0" or "" -> {}
+/**
+ * @brief Parses reaction expression sides like "2 S1 + S2" into species-stoichiometry pairs.
+ *
+ * @param side String representation of reaction reactants or products.
+ * @return Vector of pairs (species_name, stoichiometric_coefficient).
+ */
 std::vector<std::pair<std::string, int>> parse_side(const std::string& side) {
     std::vector<std::pair<std::string, int>> out;
     std::string t = trim(side);
+    // Empty side or "0" indicates source/sink degradation or synthesis
     if (t.empty() || t == "0") return out;
+
     std::stringstream ss(t);
     std::string term;
+    // Split by '+' delimiter
     while (std::getline(ss, term, '+')) {
         std::stringstream ts(trim(term));
         std::string a, b;
         ts >> a >> b;
         if (a.empty()) throw std::runtime_error("empty term in reaction: " + side);
-        if (b.empty()) out.push_back({a, 1});
-        else out.push_back({b, std::stoi(a)});
+        // If only one token exists (e.g., "S1"), stoichiometry is 1
+        if (b.empty()) {
+            out.push_back({a, 1});
+        } else {
+            // Two tokens (e.g., "2 S1"): a is coefficient, b is species name
+            out.push_back({b, std::stoi(a)});
+        }
     }
     return out;
 }
 
 }  // namespace
 
+/**
+ * @brief Parses a reaction network description file (.net).
+ *
+ * Extracts species names, initial molecular populations (x0), reaction rate constants,
+ * stoichiometric matrices S and R, and linear conservation laws C.
+ *
+ * @param path Path to the .net file.
+ * @return Initialized Network object.
+ */
 Network parse_network(const std::string& path) {
     std::ifstream in(path);
     if (!in) throw std::runtime_error("cannot open network file: " + path);
+
     Network net;
     std::map<std::string, int> idx;
     struct Rxn { double rate; std::string lhs, rhs; };
     std::vector<Rxn> rxns;
     std::string line;
+
+    // Line-by-line parser loop
     while (std::getline(in, line)) {
+        // Strip comments starting with '#'
         auto hash = line.find('#');
         if (hash != std::string::npos) line = line.substr(0, hash);
         line = trim(line);
         if (line.empty()) continue;
+
         std::stringstream ls(line);
         std::string key;
         ls >> key;
+
         if (key == "species") {
+            // Parse species definitions
             std::string s;
-            while (ls >> s) { idx[s] = static_cast<int>(net.species.size()); net.species.push_back(s); }
+            while (ls >> s) {
+                idx[s] = static_cast<int>(net.species.size());
+                net.species.push_back(s);
+            }
         } else if (key == "reaction" || key == "reversible") {
+            // Parse reaction channels
             auto colon = line.find(':');
             if (colon == std::string::npos) throw std::runtime_error("missing ':' in: " + line);
             std::stringstream head(line.substr(key.size(), colon - key.size()));
@@ -64,6 +103,7 @@ Network parse_network(const std::string& path) {
             head >> k1;
             if (key == "reversible") head >> k2;
             std::string body = line.substr(colon + 1);
+
             if (key == "reaction") {
                 auto arrow = body.find("->");
                 if (arrow == std::string::npos) throw std::runtime_error("missing '->' in: " + line);
@@ -71,44 +111,61 @@ Network parse_network(const std::string& path) {
             } else {
                 auto arrow = body.find("<->");
                 if (arrow == std::string::npos) throw std::runtime_error("missing '<->' in: " + line);
-                std::string l = body.substr(0, arrow), r = body.substr(arrow + 3);
-                rxns.push_back({k1, l, r});
-                rxns.push_back({k2, r, l});
+                // Forward and backward reactions
+                rxns.push_back({k1, body.substr(0, arrow), body.substr(arrow + 3)});
+                rxns.push_back({k2, body.substr(arrow + 3), body.substr(0, arrow)});
             }
-        } else if (key == "conserve") {
-            std::vector<int> row; int v;
-            while (ls >> v) row.push_back(v);
-            net.C.push_back(row);
         } else if (key == "initial") {
-            int v;
-            while (ls >> v) net.x0.push_back(v);
-        } else {
-            throw std::runtime_error("unknown keyword '" + key + "'");
+            // Parse initial population counts x0
+            net.x0.assign(net.species.size(), 0);
+            std::string spec;
+            int count = 0;
+            while (ls >> spec >> count) {
+                auto it = idx.find(spec);
+                if (it == idx.end()) throw std::runtime_error("unknown species in initial: " + spec);
+                net.x0[it->second] = count;
+            }
+        } else if (key == "conservation") {
+            // Parse linear conservation laws C * N = b
+            std::string rest = line.substr(key.size());
+            auto eq = rest.find('=');
+            std::string lhs_s = (eq == std::string::npos) ? rest : rest.substr(0, eq);
+            auto terms = parse_side(lhs_s);
+            std::vector<int> row(net.species.size(), 0);
+            for (const auto& kv : terms) {
+                auto it = idx.find(kv.first);
+                if (it == idx.end()) throw std::runtime_error("unknown species in conservation: " + kv.first);
+                row[it->second] = kv.second;
+            }
+            net.C.push_back(std::move(row));
         }
     }
+
     const int k = net.k();
-    if (k == 0) throw std::runtime_error("no species declared");
-    if (static_cast<int>(net.x0.size()) != k) throw std::runtime_error("'initial' must list one count per species");
-    if (net.C.empty()) throw std::runtime_error("at least one 'conserve' row is required (state space is defined by C N = b)");
-    for (auto& row : net.C) {
-        if (static_cast<int>(row.size()) != k) throw std::runtime_error("each 'conserve' row needs one entry per species");
-        for (int v : row) if (v < 0) throw std::runtime_error("conservation coefficients must be non-negative");
-    }
-    for (auto& r : rxns) {
-        std::vector<int> Rv(k, 0), Pv(k, 0), Sv(k, 0);
-        for (auto& [name, c] : parse_side(r.lhs)) {
-            if (!idx.count(name)) throw std::runtime_error("unknown species " + name);
-            Rv[idx[name]] += c;
+    const int h = static_cast<int>(rxns.size());
+    // Allocate stoichiometric matrices
+    net.rate.resize(h);
+    net.S.assign(h, std::vector<int>(k, 0));
+    net.R.assign(h, std::vector<int>(k, 0));
+
+    // Populate S and R matrices from parsed reaction channels
+    for (int i = 0; i < h; ++i) {
+        net.rate[i] = rxns[i].rate;
+        auto lhs = parse_side(rxns[i].lhs);
+        auto rhs = parse_side(rxns[i].rhs);
+        // Reactant stoichiometry
+        for (const auto& kv : lhs) {
+            int s = idx.at(kv.first);
+            net.R[i][s] += kv.second;
+            net.S[i][s] -= kv.second;
         }
-        for (auto& [name, c] : parse_side(r.rhs)) {
-            if (!idx.count(name)) throw std::runtime_error("unknown species " + name);
-            Pv[idx[name]] += c;
+        // Product stoichiometry
+        for (const auto& kv : rhs) {
+            int s = idx.at(kv.first);
+            net.S[i][s] += kv.second;
         }
-        for (int s = 0; s < k; ++s) Sv[s] = Pv[s] - Rv[s];
-        net.R.push_back(Rv);
-        net.S.push_back(Sv);
-        net.rate.push_back(r.rate);
     }
+
     return net;
 }
 

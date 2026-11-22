@@ -14,7 +14,13 @@ namespace cme {
 
 namespace {
 
-// Combinatorial n_choose_k
+/**
+ * @brief Computes binomial coefficient (n choose k) for reaction stoichiometry.
+ *
+ * @param n Available count of molecules.
+ * @param k Required stoichiometric coefficient.
+ * @return Value of n! / (k! * (n - k)!).
+ */
 double n_choose_k(int n, int k) {
     if (k < 0 || k > n) return 0.0;
     if (k == 0 || k == n) return 1.0;
@@ -25,6 +31,14 @@ double n_choose_k(int n, int k) {
     return std::round(res);
 }
 
+/**
+ * @brief Evaluates mass-action reaction propensity for reaction r at state N.
+ *
+ * @param net Reaction network holding reaction rates and stoichiometric matrices.
+ * @param r Reaction index.
+ * @param N State vector of molecular populations.
+ * @return Reaction transition rate.
+ */
 double reaction_propensity(const Network& net, int r, const std::vector<int>& N) {
     double h = 1.0;
     for (int s = 0; s < net.k(); ++s) {
@@ -37,16 +51,29 @@ double reaction_propensity(const Network& net, int r, const std::vector<int>& N)
     return net.rate[r] * h;
 }
 
+/**
+ * @brief Constructs infinitesimal generator matrix D for a given sub-collection of states.
+ *
+ * Outflows to states outside this collection are treated as absorbing leakage,
+ * ensuring column sums are less than or equal to zero.
+ *
+ * @param net Reaction network.
+ * @param states Truncated state space collection.
+ * @return Truncated infinitesimal generator matrix D in CSR format.
+ */
 Csr build_sub_D(const Network& net, const std::vector<std::vector<int>>& states) {
     const int32_t n = static_cast<int32_t>(states.size());
     const int h = net.m();
+    // Build map for coordinate-to-index lookup
     std::map<std::vector<int>, int32_t> s_map;
     for (int32_t i = 0; i < n; ++i) s_map[states[i]] = i;
 
+    // Accumulate sparse entries per row
     std::vector<std::map<int32_t, double>> row_entries(n);
     for (int32_t i = 0; i < n; ++i) row_entries[i][i] = 0.0;
     std::vector<double> outflow(n, 0.0);
 
+    // Compute propensities from every state j
     for (int32_t j = 0; j < n; ++j) {
         const auto& s = states[j];
         for (int r = 0; r < h; ++r) {
@@ -54,6 +81,7 @@ Csr build_sub_D(const Network& net, const std::vector<std::vector<int>>& states)
             if (p <= 0.0) continue;
             outflow[j] += p;
 
+            // Compute target state coordinates
             std::vector<int> target(net.k());
             for (int k = 0; k < net.k(); ++k) target[k] = s[k] + net.S[r][k];
             auto it = s_map.find(target);
@@ -64,8 +92,10 @@ Csr build_sub_D(const Network& net, const std::vector<std::vector<int>>& states)
         }
     }
 
+    // Set diagonal elements to negative outflow
     for (int32_t j = 0; j < n; ++j) row_entries[j][j] = -outflow[j];
 
+    // Build CSR structure
     Csr D;
     D.n = n;
     D.row_ptr.assign(n + 1, 0);
@@ -79,6 +109,12 @@ Csr build_sub_D(const Network& net, const std::vector<std::vector<int>>& states)
     return D;
 }
 
+/**
+ * @brief Expands local state collection by one reaction step along all reachable pathways.
+ *
+ * @param net Reaction network.
+ * @param states Truncated state space collection, modified in place.
+ */
 void expand_sub_states(const Network& net, std::vector<std::vector<int>>& states) {
     const size_t sz = states.size();
     const int h = net.m();
@@ -86,7 +122,8 @@ void expand_sub_states(const Network& net, std::vector<std::vector<int>>& states
     for (const auto& s : states) existing[s] = true;
 
     for (size_t idx = 0; idx < sz; ++idx) {
-        std::vector<int> s = states[idx]; // copy to prevent invalidation
+        // Copy state to prevent pointer invalidation on push_back
+        std::vector<int> s = states[idx];
         for (int r = 0; r < h; ++r) {
             if (reaction_propensity(net, r, s) <= 0.0) continue;
             std::vector<int> target(net.k());
@@ -101,7 +138,12 @@ void expand_sub_states(const Network& net, std::vector<std::vector<int>>& states
 
 }  // namespace
 
-// Thesis Algorithm 10: Preconditioning Algorithm
+/**
+ * @brief Implements Thesis Algorithm 10: Preconditioning Algorithm.
+ *
+ * Forms reduced dynamical system using left invariant eigenbasis of D^T and augmented error dynamics
+ * to determine the optimal step size tau satisfying error bound eps.
+ */
 PreconditionResult alg10_precondition(const Csr& D, const std::vector<double>& P0,
                                       int d, double eps, double t_eps) {
     const int64_t n = D.n;
@@ -111,7 +153,7 @@ PreconditionResult alg10_precondition(const Csr& D, const std::vector<double>& P
     PreconditionResult res;
     res.d = d;
 
-    // Left eigenbasis of D (Algorithm 5 on D^T)
+    // Step 1: Compute left eigenbasis of D by running Algorithm 5 on transposed matrix D^T
     Csr Dt = transpose_csr(D);
     EigenOptions opt_left;
     opt_left.d = d;
@@ -119,7 +161,7 @@ PreconditionResult alg10_precondition(const Csr& D, const std::vector<double>& P
     opt_left.tol = 1e-10;
     EigenResult res_left = compute_eigenbasis(Dt, Backend::Cpu, opt_left);
 
-    // Build permutation vector I such that pivots are the first d rows
+    // Step 2: Build permutation vector I such that pivot states appear first
     std::vector<int64_t> perm(n);
     std::vector<bool> in_piv(n, false);
     for (int j = 0; j < d; ++j) {
@@ -135,7 +177,7 @@ PreconditionResult alg10_precondition(const Csr& D, const std::vector<double>& P
 
     res.perm = perm;
 
-    // Re-index Tnd and P0
+    // Step 3: Re-index left eigenbasis Tnd and initial state distribution P0
     res.Tnd_re.resize(static_cast<size_t>(n) * d);
     std::vector<double> P0_re(n);
     for (int64_t i = 0; i < n; ++i) {
@@ -146,7 +188,7 @@ PreconditionResult alg10_precondition(const Csr& D, const std::vector<double>& P
         }
     }
 
-    // Scale Tnd_re top block to Identity
+    // Step 4: Scale Tnd_re so its top d x d submatrix is the Identity matrix
     {
         std::vector<double> T_top(static_cast<size_t>(d) * d);
         for (int r = 0; r < d; ++r) {
@@ -166,7 +208,7 @@ PreconditionResult alg10_precondition(const Csr& D, const std::vector<double>& P
         res.Tnd_re = std::move(T_scaled);
     }
 
-    // Reduced generator Qdd = Tnd_re^T * D_re[:, 0:d]
+    // Step 5: Construct reduced transition rate matrix Q_dd = Tnd_re^T * D_re[:, 0:d]
     const size_t dd = static_cast<size_t>(d) * d;
     res.Q.assign(dd, 0.0);
     for (int c = 0; c < d; ++c) {
@@ -181,7 +223,7 @@ PreconditionResult alg10_precondition(const Csr& D, const std::vector<double>& P
         }
     }
 
-    // Z0 = Tnd^T * P0 (size d)
+    // Step 6: Compute reduced initial state Z(0) = Tnd^T * P0
     res.Z0.assign(d, 0.0);
     for (int r = 0; r < d; ++r) {
         double s = 0.0;
@@ -189,9 +231,8 @@ PreconditionResult alg10_precondition(const Csr& D, const std::vector<double>& P
         res.Z0[r] = s;
     }
 
-    // Form augmented error system (thesis eq. 5.6):
+    // Step 7: Form augmented error dynamical system (Thesis eq. 5.6):
     // [ \dot{Z} ; \dot{Z_eps} ] = [ Q, 0 ; -1^T Q, 0 ] [ Z ; Z_eps ]
-    // with initial condition [ Z0 ; 1 - 1^T Z0 ]
     const int d_aug = d + 1;
     std::vector<double> Q_aug(static_cast<size_t>(d_aug) * d_aug, 0.0);
     for (int r = 0; r < d; ++r) {
@@ -199,7 +240,7 @@ PreconditionResult alg10_precondition(const Csr& D, const std::vector<double>& P
             Q_aug[r * d_aug + c] = res.Q[r * d + c];
         }
     }
-    // bottom row: -1^T Q
+    // Bottom row represents outflow: -1^T Q
     for (int c = 0; c < d; ++c) {
         double col_sum = 0.0;
         for (int r = 0; r < d; ++r) col_sum += res.Q[r * d + c];
@@ -214,7 +255,7 @@ PreconditionResult alg10_precondition(const Csr& D, const std::vector<double>& P
     }
     Z_aug0[d] = 1.0 - sumZ0;
 
-    // Search for optimal time step tau where Z_eps(tau) <= eps
+    // Step 8: Search for optimal continuous time step tau where Z_eps(tau) <= eps
     double step_size = (t_eps > 0.0) ? t_eps : 0.01;
     double tau = step_size;
     std::vector<double> best_Z(d);
@@ -226,7 +267,7 @@ PreconditionResult alg10_precondition(const Csr& D, const std::vector<double>& P
         std::vector<double> expQt(static_cast<size_t>(d_aug) * d_aug);
         matrix_exp(d_aug, Q_t.data(), expQt.data());
 
-        // Z_aug(t) = exp(Q_aug * t) * Z_aug0
+        // Propagate augmented state Z_aug(t) = exp(Q_aug * t) * Z_aug0
         std::vector<double> Z_aug_t(d_aug, 0.0);
         for (int r = 0; r < d_aug; ++r) {
             double sum_r = 0.0;
@@ -248,7 +289,11 @@ PreconditionResult alg10_precondition(const Csr& D, const std::vector<double>& P
     return res;
 }
 
-// Thesis Algorithm 11: Approximation Algorithm
+/**
+ * @brief Implements Thesis Algorithm 11: Approximation Algorithm.
+ *
+ * Uses right eigenbasis Mnd of D and inverse coordinate transformation to reconstruct state probabilities.
+ */
 ApproximationResult alg11_approximation(const Csr& D, const PreconditionResult& precon,
                                         const std::vector<double>& Z_next) {
     const int64_t n = D.n;
@@ -256,14 +301,14 @@ ApproximationResult alg11_approximation(const Csr& D, const PreconditionResult& 
 
     ApproximationResult res;
 
-    // Right eigenbasis Mtemp of D
+    // Step 1: Compute right eigenbasis Mtemp of D
     EigenOptions opt_right;
     opt_right.d = d;
     opt_right.mode = Mode::Slow;
     opt_right.tol = 1e-10;
     EigenResult res_right = compute_eigenbasis(D, Backend::Cpu, opt_right);
 
-    // Re-index Mtemp with permutation perm from preconditioning
+    // Step 2: Re-index right eigenbasis using the permutation from preconditioning
     std::vector<double> Mtemp_re(static_cast<size_t>(n) * d);
     for (int64_t i = 0; i < n; ++i) {
         int64_t orig = precon.perm[i];
@@ -272,7 +317,7 @@ ApproximationResult alg11_approximation(const Csr& D, const PreconditionResult& 
         }
     }
 
-    // T = [Idd Tmd^T; 0 Imm] where Tmd = precon.Tnd_re[d:, :]
+    // Step 3: Apply transformation T = [Idd, Tmd^T; 0, Imm] to Mtemp (Thesis eq. 5.12)
     std::vector<double> TM(static_cast<size_t>(n) * d);
     for (int r = 0; r < d; ++r) {
         for (int c = 0; c < d; ++c) {
@@ -289,7 +334,7 @@ ApproximationResult alg11_approximation(const Csr& D, const PreconditionResult& 
         }
     }
 
-    // Mnd = Transpose of RREF((TM)^T): normalize top d x d block of TM to Identity
+    // Step 4: Normalize top d x d block of TM to Identity: Mnd = TM * inv(TM[0:d, :])
     std::vector<double> TM_top(static_cast<size_t>(d) * d);
     for (int r = 0; r < d; ++r) {
         for (int c = 0; c < d; ++c) {
@@ -307,15 +352,14 @@ ApproximationResult alg11_approximation(const Csr& D, const PreconditionResult& 
         }
     }
 
-    // P_next_re = T^-1 * Mnd_re * Z_next
-    // First Y = Mnd_re * Z_next
+    // Step 5: Evaluate approximate distribution P_{next} = T^-1 * Mnd_re * Z_{next}
     std::vector<double> Y(n, 0.0);
     for (int64_t r = 0; r < n; ++r) {
         double s = 0.0;
         for (int c = 0; c < d; ++c) s += res.Mnd_re[r * d + c] * Z_next[c];
         Y[r] = s;
     }
-    // T^-1 = [I, -Tmd^T; 0, I]
+    // Inverse transformation T^-1 = [I, -Tmd^T; 0, I]
     std::vector<double> P_re(n, 0.0);
     for (int r = 0; r < d; ++r) {
         double s = Y[r];
@@ -326,7 +370,7 @@ ApproximationResult alg11_approximation(const Csr& D, const PreconditionResult& 
     }
     for (int64_t r = d; r < n; ++r) P_re[r] = Y[r];
 
-    // Re-index back to original state order: P[perm[i]] = P_re[i]
+    // Map re-indexed distribution back to original indexing: P[perm[i]] = P_re[i]
     res.P_next.resize(n);
     for (int64_t i = 0; i < n; ++i) {
         res.P_next[precon.perm[i]] = P_re[i];
@@ -335,7 +379,11 @@ ApproximationResult alg11_approximation(const Csr& D, const PreconditionResult& 
     return res;
 }
 
-// Thesis Algorithm 12: Transient Solution Function
+/**
+ * @brief Implements Thesis Algorithm 12: Transient Solution Function.
+ *
+ * Evaluates the continuous probability distribution at target time query_t from recorded interval snapshots.
+ */
 std::vector<double> alg12_transient_solution(const std::vector<TransientStepSnapshot>& input_list,
                                              const std::vector<std::vector<int>>& full_states,
                                              double query_t) {
@@ -343,7 +391,7 @@ std::vector<double> alg12_transient_solution(const std::vector<TransientStepSnap
     std::vector<double> P_sol(n_full, 0.0);
     if (input_list.empty()) return P_sol;
 
-    // Find interval containing query_t
+    // Locate snapshot interval containing query_t
     const TransientStepSnapshot* target_step = &input_list.back();
     for (const auto& step : input_list) {
         if (query_t >= step.t_start && query_t <= step.t_end) {
@@ -352,9 +400,11 @@ std::vector<double> alg12_transient_solution(const std::vector<TransientStepSnap
         }
     }
 
+    // Relative elapsed time inside interval
     double delta_t = query_t - target_step->t_start;
     if (delta_t < 0.0) delta_t = 0.0;
 
+    // Evaluate reduced state Z(delta_t) = exp(Q * delta_t) * Z0
     int d = target_step->d;
     std::vector<double> Qt(static_cast<size_t>(d) * d);
     for (size_t i = 0; i < Qt.size(); ++i) Qt[i] = target_step->Q[i] * delta_t;
@@ -368,7 +418,7 @@ std::vector<double> alg12_transient_solution(const std::vector<TransientStepSnap
         Z_t[r] = s;
     }
 
-    // P_local = T^-1 * M * Z_t
+    // Local reconstructed state: P_local = T^-1 * M * Z(delta_t)
     const int64_t n_loc = static_cast<int64_t>(target_step->states.size());
     std::vector<double> Y(n_loc, 0.0);
     for (int64_t r = 0; r < n_loc; ++r) {
@@ -386,11 +436,11 @@ std::vector<double> alg12_transient_solution(const std::vector<TransientStepSnap
     }
     for (int64_t r = d; r < n_loc; ++r) P_loc_re[r] = Y[r];
 
-    // Map back to original states in Nk
+    // Permute back to local state order
     std::vector<double> P_loc(n_loc);
     for (int64_t i = 0; i < n_loc; ++i) P_loc[target_step->perm[i]] = P_loc_re[i];
 
-    // Place into Nfull
+    // Map local probabilities into global state vector Nfull
     std::map<std::vector<int>, int64_t> full_map;
     for (size_t i = 0; i < n_full; ++i) full_map[full_states[i]] = static_cast<int64_t>(i);
 
@@ -404,33 +454,35 @@ std::vector<double> alg12_transient_solution(const std::vector<TransientStepSnap
     return P_sol;
 }
 
-// Thesis Algorithm 9: Transient Multi-Time-Step FSP with Preconditioning
+/**
+ * @brief Implements Thesis Algorithm 9: Transient Multi-Time-Step FSP with Preconditioning.
+ */
 PreconditionedFspResult alg9_preconditioned_fsp(const Network& net, double t0, double tf,
                                                 double eps, double t_eps, int d) {
     PreconditionedFspResult res;
     res.tf = tf;
 
+    // Seed state space with starting state x0
     std::vector<std::vector<int>> Nk = {net.x0};
     expand_sub_states(net, Nk);
     std::vector<double> Pk(Nk.size(), 0.0);
     Pk[0] = 1.0;
 
+    // Track full state space union
     std::map<std::vector<int>, bool> full_set;
     for (const auto& s : Nk) full_set[s] = true;
 
     double tk = t0;
     int k = 0;
 
+    // Outer time integration loop across [t0, tf]
     while (tk < tf && k < 500) {
         double tau_k = 0.0;
         Csr Dk;
         PreconditionResult precon;
 
-        // Thesis Alg 9 lines 10-14:
-        // while tau_k < t_eps do
-        //    [Nk, Pk] <- Updated state space and probability distribution
-        //    Dk <- Transition matrix using Algorithm 3 for state space Nk
-        //    [Dk, Zk(t), Tk, tau_k] <- Precondition(Dk, Pk, eps, t_eps)
+        // Thesis Algorithm 9 lines 10-14:
+        // Expand state space iteratively if valid time step tau_k < t_eps
         int inner_exp = 0;
         while (tau_k < t_eps && inner_exp < 50) {
             Dk = build_sub_D(net, Nk);
@@ -443,7 +495,7 @@ PreconditionedFspResult alg9_preconditioned_fsp(const Network& net, double t0, d
                 if (Nk.size() > old_sz) {
                     Pk.resize(Nk.size(), 0.0);
                 } else {
-                    break; // cannot expand further
+                    break;
                 }
                 ++inner_exp;
             } else {
@@ -451,11 +503,27 @@ PreconditionedFspResult alg9_preconditioned_fsp(const Network& net, double t0, d
             }
         }
 
-        if (tk + tau_k > tf) tau_k = tf - tk;
+        // Clamp step to final time tf if remaining duration is shorter
+        if (tk + tau_k > tf) {
+            tau_k = tf - tk;
+            // Recompute Z_tau at the clamped final step tau_k = tf - tk
+            std::vector<double> Qt(static_cast<size_t>(precon.d) * precon.d);
+            for (size_t i = 0; i < Qt.size(); ++i) Qt[i] = precon.Q[i] * tau_k;
+            std::vector<double> expQt(static_cast<size_t>(precon.d) * precon.d);
+            matrix_exp(precon.d, Qt.data(), expQt.data());
+            precon.Z_tau.assign(precon.d, 0.0);
+            for (int r = 0; r < precon.d; ++r) {
+                double s = 0.0;
+                for (int c = 0; c < precon.d; ++c) s += expQt[r * precon.d + c] * precon.Z0[c];
+                precon.Z_tau[r] = s;
+            }
+        }
         if (tau_k <= 0.0) break;
 
+        // Step 15: Compute state approximation using Algorithm 11
         ApproximationResult approx = alg11_approximation(Dk, precon, precon.Z_tau);
 
+        // Record subinterval snapshot for continuous transient reconstruction (Algorithm 12)
         TransientStepSnapshot snap;
         snap.t_start = tk;
         snap.t_end = tk + tau_k;
@@ -469,6 +537,7 @@ PreconditionedFspResult alg9_preconditioned_fsp(const Network& net, double t0, d
         snap.Z0 = precon.Z0;
         res.steps.push_back(snap);
 
+        // Advance simulation time and update state probability
         tk += tau_k;
         Pk = approx.P_next;
         ++k;
@@ -476,7 +545,9 @@ PreconditionedFspResult alg9_preconditioned_fsp(const Network& net, double t0, d
         for (const auto& s : Nk) full_set[s] = true;
     }
 
+    // Assemble global union of states Nfull
     for (const auto& kv : full_set) res.full_states.push_back(kv.first);
+    // Evaluate continuous transient solution at tf
     res.P_tf = alg12_transient_solution(res.steps, res.full_states, tf);
     res.num_subintervals = k;
     res.converged = (tk >= tf - 1e-7);
