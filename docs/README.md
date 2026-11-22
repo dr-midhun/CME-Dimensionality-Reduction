@@ -99,6 +99,51 @@ python3 utils/verify.py mm --d 4            # dense NumPy cross-check (small n)
 ```
 For a detailed breakdown of flags, metrics monitoring, and result validation, see **[docs/RUN_AND_MONITOR.md](docs/RUN_AND_MONITOR.md)**.
 
+## Running Individual Thesis Algorithms (Algorithms 1–12)
+
+Every algorithm described in the PhD thesis can be compiled, executed individually, and exported to structured output files using either dedicated `make` targets or the CLI flag `--alg <1-12>`:
+
+| Algorithm | Thesis Name | Make Target | Key Output Files |
+|---|---|---|---|
+| **Alg 1** | Iterative CME Generation | `make run-alg1` | `out/alg1.states.csv`, `out/alg1.D.mtx` |
+| **Alg 2** | State Space Generation | `make run-alg2` | `out/alg2.states.csv` |
+| **Alg 3** | CME Transition Matrix Generation | `make run-alg3` | `out/alg3.D.mtx` |
+| **Alg 4** | Dimensionality Reduction via Projection | `make run-alg4` | `out/alg4.q_reduced.csv`, `out/alg4.x0.csv`, `out/alg4.perm.txt`, `out/alg4.p_approx.csv` |
+| **Alg 5** | Invariant Subspace Eigenbasis | `make run-alg5` | `out/alg5.basis.bin`, `out/alg5.pivots.txt`, `out/alg5.dreduced.csv`, `out/alg5.eigenvalues.csv` |
+| **Alg 6** | Finite State Projection (Classic FSP) | `make run-alg6` | `out/alg6.fsp_prob.csv` |
+| **Alg 7** | Multi-Step Fixed-Step FSP | `make run-alg7` | `out/alg7.fsp_prob.csv` |
+| **Alg 8** | Multi-Step Variable-Step FSP | `make run-alg8` | `out/alg8.fsp_prob.csv` |
+| **Alg 9** | Transient Preconditioned FSP | `make run-alg9` | `out/alg9.prefsp_prob.csv`, `out/alg9.prefsp_steps.csv` |
+| **Alg 10** | Preconditioned Time Step Determination | `make run-alg10` | `out/alg10.tau.txt`, `out/alg10.q_reduced.csv`, `out/alg10.z0.csv`, `out/alg10.perm.txt` |
+| **Alg 11** | Subinterval Approximation | `make run-alg11` | `out/alg11.p_next.csv` |
+| **Alg 12** | Continuous Transient Solution | `make run-alg12` | `out/alg12.trajectory.csv` |
+
+### Run all 12 algorithms sequentially:
+```bash
+make run-all-algs
+```
+
+### Custom Network and Output Options:
+Override the target network file or output directory directly with `make`:
+```bash
+make run-alg4 NETWORK=examples/michaelis_menten.net OUT_DIR=out/custom
+```
+
+### Direct CLI Invocation:
+```bash
+# Run any individual algorithm by index (1 to 12):
+./build/cme_cli examples/michaelis_menten.net --alg 1 --out out/alg1
+./build/cme_cli examples/michaelis_menten.net --alg 4 --d 4 --solve-time 0.1 --out out/alg4
+./build/cme_cli examples/michaelis_menten.net --alg 12 --d 4 --tf 0.5 --out out/alg12
+```
+
+### Docker Execution:
+```bash
+# Run individual algorithm in Docker:
+./utils/docker_run.sh alg 4
+./utils/docker_run.sh run-all-algs
+```
+
 Network files list species, reactions, conservation rows (`conserve`) and an initial state (see
 `examples/`). Outputs: `basis.bin` (float64, row-major n×d, `B[pivots,:] = I`), `pivots.txt`,
 `dreduced.csv` (D restricted to span B, so `D B = B Dred`), `eigenvalues.csv`, and

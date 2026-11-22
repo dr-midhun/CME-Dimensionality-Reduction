@@ -206,7 +206,41 @@ You can also use `./utils/docker_run.sh`:
 ```bash
 ./utils/docker_run.sh build
 ./utils/docker_run.sh test
+./utils/docker_run.sh alg 4
+./utils/docker_run.sh run-all-algs
 ./utils/docker_run.sh cli examples/michaelis_menten.net --d 4 --reduce
 ./utils/docker_run.sh compose test
 ./utils/docker_run.sh shell
+```
+
+---
+
+## 9. Running Individual Algorithms (Algorithms 1–12)
+
+Every algorithm in the thesis can be run independently using dedicated `make run-alg<N>` commands or via `./build/cme_cli <network.net> --alg <N>`.
+
+### Algorithm Catalog & Commands
+
+| # | Algorithm Name | Make Target | CLI Command | Output Files |
+|---|---|---|---|---|
+| 1 | **Iterative CME Generation** | `make run-alg1` | `./build/cme_cli <net> --alg 1 --out out/alg1` | `alg1.states.csv`, `alg1.D.mtx` |
+| 2 | **State Space Generation** | `make run-alg2` | `./build/cme_cli <net> --alg 2 --out out/alg2` | `alg2.states.csv` |
+| 3 | **Transition Matrix Generation** | `make run-alg3` | `./build/cme_cli <net> --alg 3 --out out/alg3` | `alg3.D.mtx` |
+| 4 | **Dimensionality Reduction via Projection** | `make run-alg4` | `./build/cme_cli <net> --alg 4 --d 4 --solve-time 0.1 --out out/alg4` | `alg4.q_reduced.csv`, `alg4.x0.csv`, `alg4.perm.txt`, `alg4.p_approx.csv` |
+| 5 | **Invariant Subspace Eigenbasis** | `make run-alg5` | `./build/cme_cli <net> --alg 5 --d 4 --out out/alg5` | `alg5.basis.bin`, `alg5.pivots.txt`, `alg5.dreduced.csv`, `alg5.eigenvalues.csv` |
+| 6 | **Finite State Projection (Classic FSP)** | `make run-alg6` | `./build/cme_cli <net> --alg 6 --tf 0.1 --eps 1e-4 --out out/alg6` | `alg6.fsp_prob.csv` |
+| 7 | **Multi-Step Fixed-Step FSP** | `make run-alg7` | `./build/cme_cli <net> --alg 7 --tf 0.1 --num-steps 5 --eps 1e-4 --out out/alg7` | `alg7.fsp_prob.csv` |
+| 8 | **Multi-Step Variable-Step FSP** | `make run-alg8` | `./build/cme_cli <net> --alg 8 --tf 0.1 --eps 1e-4 --out out/alg8` | `alg8.fsp_prob.csv` |
+| 9 | **Transient Preconditioned FSP** | `make run-alg9` | `./build/cme_cli <net> --alg 9 --d 4 --tf 0.5 --eps 1e-4 --t-eps 0.01 --out out/alg9` | `alg9.prefsp_prob.csv`, `alg9.prefsp_steps.csv` |
+| 10 | **Preconditioned Time Step Determination** | `make run-alg10` | `./build/cme_cli <net> --alg 10 --d 4 --eps 1e-4 --t-eps 0.01 --out out/alg10` | `alg10.tau.txt`, `alg10.q_reduced.csv`, `alg10.z0.csv`, `alg10.perm.txt` |
+| 11 | **Subinterval Approximation** | `make run-alg11` | `./build/cme_cli <net> --alg 11 --d 4 --eps 1e-4 --t-eps 0.01 --out out/alg11` | `alg11.p_next.csv` |
+| 12 | **Continuous Transient Solution** | `make run-alg12` | `./build/cme_cli <net> --alg 12 --d 4 --tf 0.5 --eps 1e-4 --t-eps 0.01 --out out/alg12` | `alg12.trajectory.csv` |
+
+### Running All 12 Algorithms:
+```bash
+# Host machine (Makefile):
+make run-all-algs
+
+# Inside Linux Docker container:
+./utils/docker_run.sh run-all-algs
 ```

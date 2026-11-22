@@ -30,6 +30,62 @@ clean:
 	if exist $(BUILD) rmdir /s /q $(BUILD)
 	if exist *.obj del /q *.obj
 
+# ==============================================================================
+# Dedicated runners for each Thesis Algorithm (1 through 12)
+# ==============================================================================
+NETWORK = examples\michaelis_menten.net
+OUT_DIR = out
+
+run-alg1: $(BUILD)\cme_cli.exe
+	@if not exist $(OUT_DIR) mkdir $(OUT_DIR)
+	$(BUILD)\cme_cli.exe $(NETWORK) --alg 1 --out $(OUT_DIR)\alg1
+
+run-alg2: $(BUILD)\cme_cli.exe
+	@if not exist $(OUT_DIR) mkdir $(OUT_DIR)
+	$(BUILD)\cme_cli.exe $(NETWORK) --alg 2 --out $(OUT_DIR)\alg2
+
+run-alg3: $(BUILD)\cme_cli.exe
+	@if not exist $(OUT_DIR) mkdir $(OUT_DIR)
+	$(BUILD)\cme_cli.exe $(NETWORK) --alg 3 --out $(OUT_DIR)\alg3
+
+run-alg4: $(BUILD)\cme_cli.exe
+	@if not exist $(OUT_DIR) mkdir $(OUT_DIR)
+	$(BUILD)\cme_cli.exe $(NETWORK) --alg 4 --d 4 --solve-time 0.1 --out $(OUT_DIR)\alg4
+
+run-alg5: $(BUILD)\cme_cli.exe
+	@if not exist $(OUT_DIR) mkdir $(OUT_DIR)
+	$(BUILD)\cme_cli.exe $(NETWORK) --alg 5 --d 4 --out $(OUT_DIR)\alg5
+
+run-alg6: $(BUILD)\cme_cli.exe
+	@if not exist $(OUT_DIR) mkdir $(OUT_DIR)
+	$(BUILD)\cme_cli.exe $(NETWORK) --alg 6 --tf 0.1 --eps 1e-4 --out $(OUT_DIR)\alg6
+
+run-alg7: $(BUILD)\cme_cli.exe
+	@if not exist $(OUT_DIR) mkdir $(OUT_DIR)
+	$(BUILD)\cme_cli.exe $(NETWORK) --alg 7 --tf 0.1 --num-steps 5 --eps 1e-4 --out $(OUT_DIR)\alg7
+
+run-alg8: $(BUILD)\cme_cli.exe
+	@if not exist $(OUT_DIR) mkdir $(OUT_DIR)
+	$(BUILD)\cme_cli.exe $(NETWORK) --alg 8 --tf 0.1 --eps 1e-4 --out $(OUT_DIR)\alg8
+
+run-alg9: $(BUILD)\cme_cli.exe
+	@if not exist $(OUT_DIR) mkdir $(OUT_DIR)
+	$(BUILD)\cme_cli.exe $(NETWORK) --alg 9 --d 4 --tf 0.5 --eps 1e-4 --t-eps 0.01 --out $(OUT_DIR)\alg9
+
+run-alg10: $(BUILD)\cme_cli.exe
+	@if not exist $(OUT_DIR) mkdir $(OUT_DIR)
+	$(BUILD)\cme_cli.exe $(NETWORK) --alg 10 --d 4 --eps 1e-4 --t-eps 0.01 --out $(OUT_DIR)\alg10
+
+run-alg11: $(BUILD)\cme_cli.exe
+	@if not exist $(OUT_DIR) mkdir $(OUT_DIR)
+	$(BUILD)\cme_cli.exe $(NETWORK) --alg 11 --d 4 --eps 1e-4 --t-eps 0.01 --out $(OUT_DIR)\alg11
+
+run-alg12: $(BUILD)\cme_cli.exe
+	@if not exist $(OUT_DIR) mkdir $(OUT_DIR)
+	$(BUILD)\cme_cli.exe $(NETWORK) --alg 12 --d 4 --tf 0.5 --eps 1e-4 --t-eps 0.01 --out $(OUT_DIR)\alg12
+
+run-all-algs: run-alg1 run-alg2 run-alg3 run-alg4 run-alg5 run-alg6 run-alg7 run-alg8 run-alg9 run-alg10 run-alg11 run-alg12
+
 init:
 	call utils\setup_prereqs.bat
 

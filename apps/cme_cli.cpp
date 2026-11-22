@@ -36,6 +36,7 @@ static void usage() {
         "  --reduce               perform Algorithm 4 reduction (computes X0, Qdd, back-projection)\n"
         "  --transform none|left  reduction transform (default 'left': left eigenbasis, preserving probability)\n"
         "  --solve-time T         time at which to evaluate approximate distribution P(T) under Algorithm 4\n"
+        "  --alg N                run Thesis Algorithm 1-12 individually and export its artifacts\n"
         "  --alg1-bfs             run Algorithm 1 (breadth-first iterative CME state generation)\n"
         "  --fsp MODE             run FSP: 'classic' (Alg 6), 'fixed' (Alg 7), or 'variable' (Alg 8)\n"
         "  --preconditioned-fsp   run Algorithm 9 (transient multi-time-step FSP with preconditioning)\n"
@@ -69,6 +70,7 @@ int main(int argc, char** argv) {
     int num_fsp_steps = 10;
     ReductionTransform red_transform = ReductionTransform::LeftEigenbasis;
     double solve_time = -1.0;
+    int target_alg = 0;
 
     for (int i = 2; i < argc; ++i) {
         std::string a = argv[i];
@@ -100,6 +102,7 @@ int main(int argc, char** argv) {
             run_reduction = true;
         }
         else if (a == "--alg1-bfs") run_alg1 = true;
+        else if (a == "--alg") target_alg = std::atoi(next());
         else if (a == "--fsp") fsp_mode = next();
         else if (a == "--preconditioned-fsp") run_prefsp = true;
         else if (a == "--t0") t0 = std::atof(next());
@@ -113,6 +116,352 @@ int main(int argc, char** argv) {
 
     try {
         Network net = parse_network(path);
+
+        // Dedicated execution for any individual Thesis Algorithm (1 through 12)
+        if (target_alg > 0) {
+            if (target_alg < 1 || target_alg > 12) {
+                std::fprintf(stderr, "error: invalid algorithm %d (must be between 1 and 12)\n", target_alg);
+                return 1;
+            }
+            std::printf("=======================================================\n");
+            std::printf("Executing Thesis Algorithm %d on %s\n", target_alg, path.c_str());
+            std::printf("=======================================================\n");
+
+            if (target_alg == 1) {
+                // Algorithm 1: Iterative BFS CME Generation
+                double t0_w = omp_get_wtime();
+                Alg1Result a1 = alg1_generate_cme(net);
+                double el = omp_get_wtime() - t0_w;
+                std::printf("Alg 1: Discovered %zu states, %lld transitions (%.3fs)\n",
+                            a1.states.size(), (long long)a1.D.nnz(), el);
+
+                std::string states_file = prefix + ".states.csv";
+                std::ofstream fs(states_file);
+                for (int s = 0; s < net.k(); ++s) fs << net.species[s] << (s + 1 < net.k() ? "," : "\n");
+                for (const auto& st : a1.states) {
+                    for (int s = 0; s < net.k(); ++s) fs << st[s] << (s + 1 < net.k() ? "," : "\n");
+                }
+                std::printf("  -> States written to %s\n", states_file.c_str());
+
+                std::string mtx_file = prefix + ".D.mtx";
+                std::ofstream fm(mtx_file);
+                fm << "%%MatrixMarket matrix coordinate real general\n" << a1.D.n << " " << a1.D.n << " " << a1.D.nnz() << "\n";
+                fm.precision(17);
+                for (int32_t i = 0; i < a1.D.n; ++i)
+                    for (int32_t e = a1.D.row_ptr[i]; e < a1.D.row_ptr[i + 1]; ++e)
+                        fm << i + 1 << " " << a1.D.col[e] + 1 << " " << a1.D.val[e] << "\n";
+                std::printf("  -> Generator matrix D written to %s\n", mtx_file.c_str());
+                return 0;
+            }
+            if (target_alg == 2) {
+                // Algorithm 2: State Space Generation
+                double t0_w = omp_get_wtime();
+                StateSpace ss = generate_state_space(net);
+                double el = omp_get_wtime() - t0_w;
+                std::printf("Alg 2: Generated %lld reachable states (%.3fs)\n", (long long)ss.n(), el);
+
+                std::string states_file = prefix + ".states.csv";
+                std::ofstream fs(states_file);
+                for (int s = 0; s < net.k(); ++s) fs << net.species[s] << (s + 1 < net.k() ? "," : "\n");
+                std::vector<int> N(net.k());
+                for (int64_t v = 0; v < ss.n(); ++v) {
+                    ss.decode(ss.keys[v], N.data());
+                    for (int s = 0; s < net.k(); ++s) fs << N[s] << (s + 1 < net.k() ? "," : "\n");
+                }
+                std::printf("  -> States written to %s\n", states_file.c_str());
+                return 0;
+            }
+            if (target_alg == 3) {
+                // Algorithm 3: Transition Matrix Generation
+                double t0_w = omp_get_wtime();
+                StateSpace ss = generate_state_space(net);
+                Csr D = build_transition_matrix(net, ss);
+                double el = omp_get_wtime() - t0_w;
+                std::printf("Alg 3: Built transition matrix D (%d x %d, %lld non-zeros, %.3fs)\n",
+                            D.n, D.n, (long long)D.nnz(), el);
+
+                std::string mtx_file = prefix + ".D.mtx";
+                std::ofstream fm(mtx_file);
+                fm << "%%MatrixMarket matrix coordinate real general\n" << D.n << " " << D.n << " " << D.nnz() << "\n";
+                fm.precision(17);
+                for (int32_t i = 0; i < D.n; ++i)
+                    for (int32_t e = D.row_ptr[i]; e < D.row_ptr[i + 1]; ++e)
+                        fm << i + 1 << " " << D.col[e] + 1 << " " << D.val[e] << "\n";
+                std::printf("  -> Generator matrix D written to %s\n", mtx_file.c_str());
+                return 0;
+            }
+            if (target_alg == 4) {
+                // Algorithm 4: Dimensionality Reduction
+                StateSpace ss = generate_state_space(net);
+                Csr D = build_transition_matrix(net, ss);
+                uint64_t key0 = ss.encode(net.x0.data());
+                int64_t idx0 = ss.find(key0);
+                std::vector<double> P0(ss.n(), 0.0);
+                if (idx0 >= 0 && idx0 < ss.n()) P0[idx0] = 1.0;
+                else P0[0] = 1.0;
+
+                ReductionOptions red_opt;
+                red_opt.d = opt.d > 0 ? opt.d : 4;
+                red_opt.transform = red_transform;
+                red_opt.tol = opt.tol;
+                red_opt.max_iter = opt.max_iter;
+                red_opt.cutoff = opt.cutoff;
+                red_opt.degree = opt.degree;
+                red_opt.backend = backend;
+                red_opt.verbose = opt.verbose;
+
+                double t0_w = omp_get_wtime();
+                ReductionModel rm = reduce_cme(D, P0, red_opt);
+                double el = omp_get_wtime() - t0_w;
+                std::printf("Alg 4: Dimensionality reduction completed: n = %d -> d = %d (%.3fs)\n",
+                            D.n, rm.d, el);
+
+                std::string q_file = prefix + ".q_reduced.csv";
+                std::ofstream fq(q_file);
+                fq.precision(17);
+                for (int i = 0; i < rm.d; ++i)
+                    for (int j = 0; j < rm.d; ++j)
+                        fq << rm.Q[i * rm.d + j] << (j + 1 < rm.d ? "," : "\n");
+                std::printf("  -> Reduced generator Q_dd written to %s\n", q_file.c_str());
+
+                std::string x0_file = prefix + ".x0.csv";
+                std::ofstream fx(x0_file);
+                fx.precision(17);
+                for (int i = 0; i < rm.d; ++i) fx << rm.X0[i] << "\n";
+                std::printf("  -> Projected initial condition X(0) written to %s\n", x0_file.c_str());
+
+                std::string perm_file = prefix + ".perm.txt";
+                std::ofstream fp(perm_file);
+                for (int64_t p : rm.perm) fp << p << "\n";
+                std::printf("  -> Pivot permutation written to %s\n", perm_file.c_str());
+
+                double st = solve_time >= 0.0 ? solve_time : 0.1;
+                std::vector<double> P_sol = rm.solve(st);
+                std::string pa_file = prefix + ".p_approx.csv";
+                std::ofstream fpa(pa_file);
+                fpa.precision(17);
+                for (int64_t i = 0; i < ss.n(); ++i) fpa << P_sol[i] << "\n";
+                std::printf("  -> Approximate distribution P(t=%.4f) written to %s\n", st, pa_file.c_str());
+                return 0;
+            }
+            if (target_alg == 5) {
+                // Algorithm 5: Eigenbasis Calculation
+                StateSpace ss = generate_state_space(net);
+                Csr D = build_transition_matrix(net, ss);
+                if (opt.d <= 0) opt.d = 4;
+                double t0_w = omp_get_wtime();
+                EigenResult r = compute_eigenbasis(D, backend, opt);
+                double el = omp_get_wtime() - t0_w;
+                std::printf("Alg 5: Eigenbasis computed: d = %d, iterations = %d, residual = %.2e (%.3fs)\n",
+                            r.d, r.iterations, r.residual, el);
+
+                std::string basis_file = prefix + ".basis.bin";
+                std::ofstream fb(basis_file, std::ios::binary);
+                fb.write(reinterpret_cast<const char*>(r.basis.data()), r.basis.size() * sizeof(double));
+                std::printf("  -> Basis matrix B written to %s\n", basis_file.c_str());
+
+                std::string pivots_file = prefix + ".pivots.txt";
+                std::ofstream fp(pivots_file);
+                for (auto p : r.pivots) fp << p << "\n";
+                std::printf("  -> Pivot states written to %s\n", pivots_file.c_str());
+
+                std::string dred_file = prefix + ".dreduced.csv";
+                std::ofstream fd(dred_file);
+                fd.precision(17);
+                for (int i = 0; i < r.d; ++i)
+                    for (int j = 0; j < r.d; ++j)
+                        fd << r.d_reduced[i * r.d + j] << (j + 1 < r.d ? "," : "\n");
+                std::printf("  -> Reduced matrix D_red written to %s\n", dred_file.c_str());
+
+                if (!r.eig_re.empty()) {
+                    std::string eig_file = prefix + ".eigenvalues.csv";
+                    std::ofstream fe(eig_file);
+                    fe.precision(17);
+                    for (int j = 0; j < r.d; ++j) fe << r.eig_re[j] << "," << r.eig_im[j] << "\n";
+                    std::printf("  -> Eigenvalues written to %s\n", eig_file.c_str());
+                }
+                return r.converged ? 0 : 2;
+            }
+            if (target_alg == 6) {
+                // Algorithm 6: Classic FSP
+                FspOptions fsp_opt;
+                fsp_opt.tf = tf > 0 ? tf : 0.1;
+                fsp_opt.eps = eps;
+                double t0_w = omp_get_wtime();
+                FspResult fsp_res = alg6_fsp(net, fsp_opt);
+                double el = omp_get_wtime() - t0_w;
+                std::printf("Alg 6 (Classic FSP): states = %zu, error bound = %.2e, converged = %s (%.3fs)\n",
+                            fsp_res.states.size(), fsp_res.error_bound, fsp_res.converged ? "yes" : "NO", el);
+
+                std::string prob_file = prefix + ".fsp_prob.csv";
+                std::ofstream f(prob_file);
+                f.precision(17);
+                for (double p : fsp_res.prob) f << p << "\n";
+                std::printf("  -> FSP probability distribution written to %s\n", prob_file.c_str());
+                return fsp_res.converged ? 0 : 2;
+            }
+            if (target_alg == 7) {
+                // Algorithm 7: Fixed Multi-Step FSP
+                FspOptions fsp_opt;
+                fsp_opt.tf = tf > 0 ? tf : 0.1;
+                fsp_opt.eps = eps;
+                fsp_opt.n_intervals = num_fsp_steps > 0 ? num_fsp_steps : 5;
+                double t0_w = omp_get_wtime();
+                FspResult fsp_res = alg7_multistep_fixed_fsp(net, fsp_opt);
+                double el = omp_get_wtime() - t0_w;
+                std::printf("Alg 7 (Fixed Multi-Step FSP): intervals = %d, states = %zu, error bound = %.2e (%.3fs)\n",
+                            fsp_opt.n_intervals, fsp_res.states.size(), fsp_res.error_bound, el);
+
+                std::string prob_file = prefix + ".fsp_prob.csv";
+                std::ofstream f(prob_file);
+                f.precision(17);
+                for (double p : fsp_res.prob) f << p << "\n";
+                std::printf("  -> Fixed FSP probability distribution written to %s\n", prob_file.c_str());
+                return fsp_res.converged ? 0 : 2;
+            }
+            if (target_alg == 8) {
+                // Algorithm 8: Variable Multi-Step FSP
+                FspOptions fsp_opt;
+                fsp_opt.tf = tf > 0 ? tf : 0.1;
+                fsp_opt.eps = eps;
+                double t0_w = omp_get_wtime();
+                FspResult fsp_res = alg8_multistep_variable_fsp(net, fsp_opt);
+                double el = omp_get_wtime() - t0_w;
+                std::printf("Alg 8 (Variable Multi-Step FSP): states = %zu, error bound = %.2e, converged = %s (%.3fs)\n",
+                            fsp_res.states.size(), fsp_res.error_bound, fsp_res.converged ? "yes" : "NO", el);
+
+                std::string prob_file = prefix + ".fsp_prob.csv";
+                std::ofstream f(prob_file);
+                f.precision(17);
+                for (double p : fsp_res.prob) f << p << "\n";
+                std::printf("  -> Variable FSP probability distribution written to %s\n", prob_file.c_str());
+                return fsp_res.converged ? 0 : 2;
+            }
+            if (target_alg == 9) {
+                // Algorithm 9: Transient Preconditioned FSP
+                int d_val = opt.d > 0 ? opt.d : 4;
+                double t0_w = omp_get_wtime();
+                PreconditionedFspResult prefsp = alg9_preconditioned_fsp(net, t0, tf, eps, t_eps, d_val);
+                double el = omp_get_wtime() - t0_w;
+                std::printf("Alg 9 (Preconditioned FSP): subintervals = %d, union states = %zu, converged = %s (%.3fs)\n",
+                            prefsp.num_subintervals, prefsp.full_states.size(), prefsp.converged ? "yes" : "NO", el);
+
+                std::string prob_file = prefix + ".prefsp_prob.csv";
+                std::ofstream fp(prob_file);
+                fp.precision(17);
+                for (double p : prefsp.P_tf) fp << p << "\n";
+                std::printf("  -> Final distribution P(tf=%.4f) written to %s\n", tf, prob_file.c_str());
+
+                std::string steps_file = prefix + ".prefsp_steps.csv";
+                std::ofstream fs(steps_file);
+                fs << "step,t_start,t_end,tau,d,local_states\n";
+                for (size_t s = 0; s < prefsp.steps.size(); ++s) {
+                    const auto& step = prefsp.steps[s];
+                    fs << s << "," << step.t_start << "," << step.t_end << "," << step.tau
+                       << "," << step.d << "," << step.states.size() << "\n";
+                }
+                std::printf("  -> Step trajectory history written to %s\n", steps_file.c_str());
+                return prefsp.converged ? 0 : 2;
+            }
+            if (target_alg == 10) {
+                // Algorithm 10: Preconditioning Algorithm (optimal tau, reduced Q, Z0)
+                StateSpace ss = generate_state_space(net);
+                Csr D = build_transition_matrix(net, ss);
+                uint64_t key0 = ss.encode(net.x0.data());
+                int64_t idx0 = ss.find(key0);
+                std::vector<double> P0(ss.n(), 0.0);
+                if (idx0 >= 0 && idx0 < ss.n()) P0[idx0] = 1.0;
+                else P0[0] = 1.0;
+
+                int d_val = opt.d > 0 ? opt.d : 4;
+                double t0_w = omp_get_wtime();
+                PreconditionResult pr = alg10_precondition(D, P0, d_val, eps, t_eps);
+                double el = omp_get_wtime() - t0_w;
+                std::printf("Alg 10 (Preconditioning): optimal tau = %.6e, d = %d, error bound = %.2e (%.3fs)\n",
+                            pr.tau, pr.d, eps, el);
+
+                std::string tau_file = prefix + ".tau.txt";
+                std::ofstream ft(tau_file);
+                ft << "tau=" << pr.tau << "\n" << "d=" << pr.d << "\n" << "eps=" << eps << "\n" << "t_eps=" << t_eps << "\n";
+                std::printf("  -> Optimal time step parameters written to %s\n", tau_file.c_str());
+
+                std::string q_file = prefix + ".q_reduced.csv";
+                std::ofstream fq(q_file);
+                fq.precision(17);
+                for (int i = 0; i < pr.d; ++i)
+                    for (int j = 0; j < pr.d; ++j)
+                        fq << pr.Q[i * pr.d + j] << (j + 1 < pr.d ? "," : "\n");
+                std::printf("  -> Reduced generator Q written to %s\n", q_file.c_str());
+
+                std::string z0_file = prefix + ".z0.csv";
+                std::ofstream fz(z0_file);
+                fz.precision(17);
+                for (double z : pr.Z0) fz << z << "\n";
+                std::printf("  -> Reduced initial condition Z0 written to %s\n", z0_file.c_str());
+
+                std::string perm_file = prefix + ".perm.txt";
+                std::ofstream fp(perm_file);
+                for (int64_t p : pr.perm) fp << p << "\n";
+                std::printf("  -> Re-indexing permutation written to %s\n", perm_file.c_str());
+                return 0;
+            }
+            if (target_alg == 11) {
+                // Algorithm 11: Subinterval Approximation
+                StateSpace ss = generate_state_space(net);
+                Csr D = build_transition_matrix(net, ss);
+                uint64_t key0 = ss.encode(net.x0.data());
+                int64_t idx0 = ss.find(key0);
+                std::vector<double> P0(ss.n(), 0.0);
+                if (idx0 >= 0 && idx0 < ss.n()) P0[idx0] = 1.0;
+                else P0[0] = 1.0;
+
+                int d_val = opt.d > 0 ? opt.d : 4;
+                double t0_w = omp_get_wtime();
+                PreconditionResult pr = alg10_precondition(D, P0, d_val, eps, t_eps);
+                ApproximationResult ar = alg11_approximation(D, pr, pr.Z_tau);
+                double el = omp_get_wtime() - t0_w;
+                std::printf("Alg 11 (Subinterval Approximation): tau = %.6e, state count = %zu (%.3fs)\n",
+                            pr.tau, ar.P_next.size(), el);
+
+                std::string pnext_file = prefix + ".p_next.csv";
+                std::ofstream fp(pnext_file);
+                fp.precision(17);
+                for (double p : ar.P_next) fp << p << "\n";
+                std::printf("  -> Reconstructed probability distribution P_next written to %s\n", pnext_file.c_str());
+                return 0;
+            }
+            if (target_alg == 12) {
+                // Algorithm 12: Continuous Transient Solution
+                int d_val = opt.d > 0 ? opt.d : 4;
+                double t0_w = omp_get_wtime();
+                PreconditionedFspResult prefsp = alg9_preconditioned_fsp(net, t0, tf, eps, t_eps, d_val);
+                double el = omp_get_wtime() - t0_w;
+                std::printf("Alg 12 (Continuous Transient Evaluation): evaluating continuous trajectory across [t0=%.4f, tf=%.4f] (%.3fs)\n",
+                            t0, tf, el);
+
+                std::string traj_file = prefix + ".trajectory.csv";
+                std::ofstream ft(traj_file);
+                ft << "time";
+                for (size_t s = 0; s < prefsp.full_states.size(); ++s) ft << ",P_s" << s;
+                ft << ",sum\n";
+                ft.precision(17);
+
+                int num_pts = 10;
+                for (int step = 0; step <= num_pts; ++step) {
+                    double q_t = t0 + step * (tf - t0) / num_pts;
+                    std::vector<double> P_t = alg12_transient_solution(prefsp.steps, prefsp.full_states, q_t);
+                    ft << q_t;
+                    double sum = 0.0;
+                    for (double p : P_t) {
+                        ft << "," << p;
+                        sum += p;
+                    }
+                    ft << "," << sum << "\n";
+                }
+                std::printf("  -> Continuous trajectory grid evaluated and written to %s\n", traj_file.c_str());
+                return prefsp.converged ? 0 : 2;
+            }
+        }
 
         // Optional Algorithm 1 run
         if (run_alg1) {
