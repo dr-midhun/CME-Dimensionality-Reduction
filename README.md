@@ -1,9 +1,10 @@
-# cme-fast
+# Dimensionality Reduction of the Chemical Master Equation
 
-C++17 / OpenMP / CUDA implementation of the CME pipeline from the thesis:
+C++17 / OpenMP / CUDA implementation of the Chemical Master Equation (CME) pipeline and dimensionality reduction algorithms based on the Ph.D. thesis:
+> **Dimensionality Reduction of the Chemical Master Equation**  
+> Midhun Kathanaruparambil Sukumaran (University of Waterloo, 2019)  
+> Thesis reference: https://uwspace.uwaterloo.ca/items/173f4625-6e7f-4e0a-9909-3ae0c67e10dd
 
-| Thesis | Here | Backends |
-|---|---|---|
 | Thesis | Here | Backends |
 |---|---|---|
 | Alg. 1 – iterative breadth-first CME generation (Kan et al.) | `src/alg1_cme.cpp` | CPU |
@@ -113,3 +114,6 @@ GPU memory ≈ 12 B/nnz + 3·n·d·8 B. Matrix generation is CPU-only.
 Chebyshev work still scales like √(σ/gap)·log(1/tol). For the Michaelis–Menten family σ/gap ≈ 10⁵–10⁶,
 so n = 5151 needed ~2.8·10⁵ SpMM products (44 s on one core). Shift-invert or Krylov–Schur would need
 fewer products but a factorization or orthogonalization per step; not implemented.
+
+## Thesis Reference
+* Sukumaran, Midhun Kathanaruparambil. *Dimensionality Reduction of the Chemical Master Equation*. PhD thesis, University of Waterloo, 2019. [UWSpace Archive](https://uwspace.uwaterloo.ca/items/173f4625-6e7f-4e0a-9909-3ae0c67e10dd).

@@ -3,7 +3,7 @@ rem Setup prerequisites for Windows
 setlocal enabledelayedexpansion
 
 echo =======================================================
-echo Setting up prerequisites for CME-fast on Windows...
+echo Setting up prerequisites for Dimensionality Reduction of the Chemical Master Equation on Windows...
 echo =======================================================
 
 rem Check for winget

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.18)
-project(cme_fast LANGUAGES CXX)
+project(Dimensionality_Reduction_of_the_Chemical_Master_Equation LANGUAGES CXX)
 
 option(CME_ENABLE_CUDA   "Build the GPU backend (cuBLAS + cuSPARSE)" OFF)
 option(CME_ENABLE_LAPACK "Use LAPACK dgeev for the d x d reduced eigenproblem" ON)
