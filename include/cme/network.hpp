@@ -17,6 +17,7 @@ struct Network {
     std::vector<int> x0;
     int k() const { return static_cast<int>(species.size()); }
     int h() const { return static_cast<int>(rate.size()); }
+    int m() const { return static_cast<int>(rate.size()); }
 };
 
 // Text format (see examples/michaelis_menten.net):

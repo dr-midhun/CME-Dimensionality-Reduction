@@ -9,7 +9,7 @@
 CXX      = cl
 CXXFLAGS = /O2 /std:c++17 /openmp /W3 /EHsc /MD /nologo
 INC      = /Iinclude
-SRC      = src\network.cpp src\state_space.cpp src\transition.cpp src\csr_util.cpp src\reduction.cpp src\eigenbasis.cpp src\eigenbasis_cpu.cpp
+SRC      = src\network.cpp src\csr_util.cpp src\alg1_cme.cpp src\alg2_state_space.cpp src\alg3_transition.cpp src\alg4_reduction.cpp src\alg5_eigenbasis.cpp src\alg5_eigenbasis_cpu.cpp src\alg6_7_8_fsp.cpp src\alg9_10_11_12_preconditioned_fsp.cpp
 BUILD    = build
 
 all: $(BUILD)\cme_cli.exe $(BUILD)\test_small.exe

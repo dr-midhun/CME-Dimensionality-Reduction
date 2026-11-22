@@ -11,9 +11,14 @@ if(NOT CMAKE_BUILD_TYPE)
 endif()
 find_package(OpenMP REQUIRED)
 
-add_library(cme STATIC src/network.cpp src/state_space.cpp src/transition.cpp
-                       src/csr_util.cpp src/reduction.cpp
-                       src/eigenbasis.cpp src/eigenbasis_cpu.cpp)
+add_library(cme STATIC src/network.cpp src/csr_util.cpp
+                       src/alg1_cme.cpp
+                       src/alg2_state_space.cpp
+                       src/alg3_transition.cpp
+                       src/alg4_reduction.cpp
+                       src/alg5_eigenbasis.cpp src/alg5_eigenbasis_cpu.cpp
+                       src/alg6_7_8_fsp.cpp
+                       src/alg9_10_11_12_preconditioned_fsp.cpp)
 target_include_directories(cme PUBLIC include)
 target_link_libraries(cme PUBLIC OpenMP::OpenMP_CXX)
 target_compile_options(cme PRIVATE -Wall -Wextra)
@@ -30,7 +35,7 @@ endif()
 
 if(CME_ENABLE_CUDA)
   find_package(CUDAToolkit REQUIRED)
-  target_sources(cme PRIVATE src/eigenbasis_cuda.cpp)
+  target_sources(cme PRIVATE src/alg5_eigenbasis_cuda.cpp)
   target_compile_definitions(cme PUBLIC CME_WITH_CUDA)
   target_link_libraries(cme PUBLIC CUDA::cudart CUDA::cublas CUDA::cusparse)
 endif()

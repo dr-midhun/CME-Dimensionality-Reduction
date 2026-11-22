@@ -4,10 +4,20 @@ C++17 / OpenMP / CUDA implementation of the CME pipeline from the thesis:
 
 | Thesis | Here | Backends |
 |---|---|---|
-| Alg. 2 – state space (non-negative integer solutions of `C N = b`) | `src/state_space.cpp` | CPU (OpenMP) |
-| Alg. 3 – transition matrix `D` | `src/transition.cpp` | CPU (OpenMP) |
-| Alg. 4 – reduction algorithm (reduced IVP, projection & reconstruction) | `src/reduction.cpp` | CPU (OpenMP) |
-| Alg. 5 – semi-orthogonal eigenbasis (block power iteration + pivoting) | `src/eigenbasis_cpu.cpp`, `src/eigenbasis_cuda.cpp` | CPU, GPU (cuSPARSE + cuBLAS) |
+| Thesis | Here | Backends |
+|---|---|---|
+| Alg. 1 – iterative breadth-first CME generation (Kan et al.) | `src/alg1_cme.cpp` | CPU |
+| Alg. 2 – state space (non-negative integer solutions of `C N = b`) | `src/alg2_state_space.cpp` | CPU (OpenMP) |
+| Alg. 3 – transition matrix `D` | `src/alg3_transition.cpp` | CPU (OpenMP) |
+| Alg. 4 – reduction algorithm (reduced IVP, projection & reconstruction) | `src/alg4_reduction.cpp` | CPU (OpenMP) |
+| Alg. 5 – semi-orthogonal eigenbasis (block power iteration + pivoting) | `src/alg5_eigenbasis_cpu.cpp`, `src/alg5_eigenbasis_cuda.cpp` | CPU, GPU (cuSPARSE + cuBLAS) |
+| Alg. 6 – classic Finite State Projection (Munsky & Khammash) | `src/alg6_7_8_fsp.cpp` | CPU |
+| Alg. 7 – multiple time-step FSP with fixed time step | `src/alg6_7_8_fsp.cpp` | CPU |
+| Alg. 8 – multiple time-step FSP with variable time step | `src/alg6_7_8_fsp.cpp` | CPU |
+| Alg. 9 – transient multi-time-step FSP with preconditioning | `src/alg9_10_11_12_preconditioned_fsp.cpp` | CPU |
+| Alg. 10 – preconditioning algorithm (optimal step & error dynamics) | `src/alg9_10_11_12_preconditioned_fsp.cpp` | CPU |
+| Alg. 11 – approximation algorithm (right eigenbasis back-projection) | `src/alg9_10_11_12_preconditioned_fsp.cpp` | CPU |
+| Alg. 12 – continuous transient solution evaluator | `src/alg9_10_11_12_preconditioned_fsp.cpp` | CPU |
 
 States are stored as sorted 64-bit mixed-radix keys (8 B/state); neighbours are found by key
 arithmetic + binary search. 2,003,001 states / 10 M nonzeros assemble in ~0.9 s on one core.

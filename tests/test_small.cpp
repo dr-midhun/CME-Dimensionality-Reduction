@@ -7,11 +7,14 @@
 #include <string>
 #include <vector>
 
-#include "cme/eigenbasis.hpp"
+#include "cme/alg1_cme.hpp"
+#include "cme/alg2_state_space.hpp"
+#include "cme/alg3_transition.hpp"
+#include "cme/alg4_reduction.hpp"
+#include "cme/alg5_eigenbasis.hpp"
+#include "cme/alg6_7_8_fsp.hpp"
+#include "cme/alg9_10_11_12_preconditioned_fsp.hpp"
 #include "cme/network.hpp"
-#include "cme/reduction.hpp"
-#include "cme/state_space.hpp"
-#include "cme/transition.hpp"
 
 using namespace cme;
 static int failures = 0;
@@ -144,6 +147,73 @@ int main(int argc, char** argv) {
             max_diff = std::max(max_diff, std::fabs(P_approx_T[i] - P_approx_noT[i]));
         }
         CHECK(max_diff < 1e-5, "Alg 4: LeftEigenbasis and NoTransform approximations agree (max diff < 1e-5)");
+    }
+
+    // Algorithm 1 validation: Iterative breadth-first state space and CME generation (Thesis Section 3)
+    {
+        Alg1Result a1 = alg1_generate_cme(net);
+        CHECK(a1.states.size() == 10, "Alg 1: generates 10 states for MM network");
+        CHECK(a1.D.nnz() == 34, "Alg 1: generates 34 transitions in D");
+
+        // Verify column sums of D from Alg 1 are all 0
+        std::vector<double> csum(a1.D.n, 0.0);
+        for (int i = 0; i < a1.D.n; ++i) {
+            for (int e = a1.D.row_ptr[i]; e < a1.D.row_ptr[i + 1]; ++e) {
+                csum[a1.D.col[e]] += a1.D.val[e];
+            }
+        }
+        double worst = 0.0;
+        for (double c : csum) worst = std::max(worst, std::fabs(c));
+        CHECK(worst < 1e-9, "Alg 1: all column sums in D are zero");
+    }
+
+    // Algorithms 6, 7, 8 validation: Finite State Projection methods (Thesis Chapter 5)
+    {
+        FspOptions fopt;
+        fopt.tf = 0.05;
+        fopt.eps = 1e-2;
+
+        // Alg 6: Classic FSP
+        FspResult r6 = alg6_fsp(net, fopt);
+        CHECK(r6.converged, "Alg 6 (Classic FSP): converged within error tolerance");
+        CHECK(r6.error_bound <= fopt.eps, "Alg 6: error bound <= eps");
+
+        // Alg 7: Fixed multi-step FSP
+        fopt.n_intervals = 5;
+        FspResult r7 = alg7_multistep_fixed_fsp(net, fopt);
+        CHECK(r7.converged, "Alg 7 (Fixed Multi-step FSP): converged");
+        CHECK(r7.error_bound <= fopt.eps * 1.05, "Alg 7: error bound <= eps");
+
+        // Alg 8: Variable multi-step FSP
+        FspResult r8 = alg8_multistep_variable_fsp(net, fopt);
+        CHECK(r8.converged, "Alg 8 (Variable Multi-step FSP): converged");
+        CHECK(r8.error_bound <= fopt.eps * 1.05, "Alg 8: error bound <= eps");
+    }
+
+    // Algorithms 9, 10, 11, 12 validation: Preconditioned Multi-Step FSP Pipeline (Thesis Chapter 5)
+    {
+        // Alg 10 & 11 direct check: Precondition and Approximation
+        std::vector<double> P0(ss.n(), 0.0);
+        P0[0] = 1.0;
+        PreconditionResult precon = alg10_precondition(D, P0, 4, 1e-3, 0.01);
+        CHECK(precon.tau > 0.0, "Alg 10 (Precondition): identified positive time step tau");
+        CHECK(precon.d == 4, "Alg 10: reduced dimension d = 4");
+
+        ApproximationResult approx = alg11_approximation(D, precon, precon.Z_tau);
+        double sum_p = 0.0;
+        for (double v : approx.P_next) sum_p += v;
+        CHECK(std::fabs(sum_p - 1.0) < 1e-4, "Alg 11 (Approximation): probability conservation holds");
+
+        // Alg 9 & 12 full pipeline: Transient Multi-Step FSP with Preconditioning
+        PreconditionedFspResult r9 = alg9_preconditioned_fsp(net, 0.0, 0.05, 1e-2, 0.01, 4);
+        CHECK(r9.converged, "Alg 9 (Preconditioned FSP): full multi-step converged");
+        CHECK(!r9.steps.empty(), "Alg 9: recorded transient subinterval steps");
+
+        // Alg 12: evaluate continuous transient solution at an intermediate time
+        std::vector<double> P_mid = alg12_transient_solution(r9.steps, r9.full_states, 0.025);
+        double sum_mid = 0.0;
+        for (double v : P_mid) sum_mid += v;
+        CHECK(std::fabs(sum_mid - 1.0) < 1e-3, "Alg 12 (TransientSolution): evaluated continuous solution with sum ~ 1");
     }
 
     std::printf("%s (%d failures)\n", failures ? "FAILED" : "ALL PASSED", failures);

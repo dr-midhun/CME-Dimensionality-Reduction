@@ -11,7 +11,14 @@ endif
 
 CXXFLAGS ?= -O3 -march=native -std=c++17 -Wall -Wextra
 INC      := -Iinclude
-SRC      := src/network.cpp src/state_space.cpp src/transition.cpp src/csr_util.cpp src/reduction.cpp src/eigenbasis.cpp src/eigenbasis_cpu.cpp
+SRC      := src/network.cpp src/csr_util.cpp \
+            src/alg1_cme.cpp \
+            src/alg2_state_space.cpp \
+            src/alg3_transition.cpp \
+            src/alg4_reduction.cpp \
+            src/alg5_eigenbasis.cpp src/alg5_eigenbasis_cpu.cpp \
+            src/alg6_7_8_fsp.cpp \
+            src/alg9_10_11_12_preconditioned_fsp.cpp
 LDLIBS   :=
 
 ifeq ($(UNAME_S),Darwin)
@@ -33,7 +40,7 @@ ifeq ($(GPU),1)
   CUDA_HOME ?= /usr/local/cuda
   CXXFLAGS += -DCME_WITH_CUDA
   INC      += -I$(CUDA_HOME)/include
-  SRC      += src/eigenbasis_cuda.cpp
+  SRC      += src/alg5_eigenbasis_cuda.cpp
   LDLIBS   += -L$(CUDA_HOME)/lib64 -lcudart -lcublas -lcusparse
 endif
 
@@ -51,7 +58,7 @@ test: $(BUILD)/test_small
 	./$(BUILD)/test_small
 
 # Runs the GPU code path against a CPU mock of cuBLAS/cuSPARSE (logic check only, no GPU needed).
-test-gpu-logic: tests/test_small.cpp $(SRC) src/eigenbasis_cuda.cpp tests/mock_cuda/mock.cpp | $(BUILD)
+test-gpu-logic: tests/test_small.cpp $(SRC) src/alg5_eigenbasis_cuda.cpp tests/mock_cuda/mock.cpp | $(BUILD)
 	$(CXX) $(CXXFLAGS) -DCME_WITH_CUDA -Itests/mock_cuda -Iinclude $^ -o $(BUILD)/test_gpu_logic $(LDLIBS)
 	./$(BUILD)/test_gpu_logic gpu
 clean:
