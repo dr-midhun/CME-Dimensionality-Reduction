@@ -6,6 +6,7 @@ C++17 / OpenMP / CUDA implementation of the CME pipeline from the thesis:
 |---|---|---|
 | Alg. 2 – state space (non-negative integer solutions of `C N = b`) | `src/state_space.cpp` | CPU (OpenMP) |
 | Alg. 3 – transition matrix `D` | `src/transition.cpp` | CPU (OpenMP) |
+| Alg. 4 – reduction algorithm (reduced IVP, projection & reconstruction) | `src/reduction.cpp` | CPU (OpenMP) |
 | Alg. 5 – semi-orthogonal eigenbasis (block power iteration + pivoting) | `src/eigenbasis_cpu.cpp`, `src/eigenbasis_cuda.cpp` | CPU, GPU (cuSPARSE + cuBLAS) |
 
 States are stored as sorted 64-bit mixed-radix keys (8 B/state); neighbours are found by key

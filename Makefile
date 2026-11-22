@@ -11,7 +11,7 @@ endif
 
 CXXFLAGS ?= -O3 -march=native -std=c++17 -Wall -Wextra
 INC      := -Iinclude
-SRC      := src/network.cpp src/state_space.cpp src/transition.cpp src/eigenbasis.cpp src/eigenbasis_cpu.cpp
+SRC      := src/network.cpp src/state_space.cpp src/transition.cpp src/csr_util.cpp src/reduction.cpp src/eigenbasis.cpp src/eigenbasis_cpu.cpp
 LDLIBS   :=
 
 ifeq ($(UNAME_S),Darwin)

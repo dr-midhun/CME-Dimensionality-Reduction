@@ -9,6 +9,7 @@
 
 #include "cme/eigenbasis.hpp"
 #include "cme/network.hpp"
+#include "cme/reduction.hpp"
 #include "cme/state_space.hpp"
 #include "cme/transition.hpp"
 
@@ -29,9 +30,13 @@ static void usage() {
         "  --out PREFIX     output prefix (default 'out')\n"
         "  --dump-matrix    write PREFIX.D.mtx (Matrix Market)\n"
         "  --dump-states    write PREFIX.states.csv\n"
+        "  --reduce         perform Algorithm 4 reduction (computes X0, Qdd, back-projection)\n"
+        "  --transform none|left  reduction transform (default 'left': left eigenbasis, preserving probability)\n"
+        "  --solve-time T   time at which to evaluate approximate distribution P(T) under Algorithm 4\n"
         "  --verbose\n"
         "outputs: PREFIX.basis.bin (float64, row-major n x d), PREFIX.pivots.txt,\n"
-        "         PREFIX.dreduced.csv, PREFIX.eigenvalues.csv, PREFIX.eigenvectors.bin (if all real)");
+        "         PREFIX.dreduced.csv, PREFIX.eigenvalues.csv, PREFIX.eigenvectors.bin (if all real)\n"
+        "         with --reduce: PREFIX.q_reduced.csv, PREFIX.x0.csv, PREFIX.perm.txt, [PREFIX.p_approx.csv]");
 }
 
 int main(int argc, char** argv) {
@@ -40,6 +45,9 @@ int main(int argc, char** argv) {
     EigenOptions opt;
     Backend backend = Backend::Cpu;
     bool dump_mtx = false, dump_states = false;
+    bool run_reduction = false;
+    ReductionTransform red_transform = ReductionTransform::LeftEigenbasis;
+    double solve_time = -1.0;
     for (int i = 2; i < argc; ++i) {
         std::string a = argv[i];
         auto next = [&]() -> const char* {
@@ -58,6 +66,17 @@ int main(int argc, char** argv) {
         else if (a == "--out") prefix = next();
         else if (a == "--dump-matrix") dump_mtx = true;
         else if (a == "--dump-states") dump_states = true;
+        else if (a == "--reduce") run_reduction = true;
+        else if (a == "--transform") {
+            std::string tval = next();
+            if (tval == "none") red_transform = ReductionTransform::None;
+            else if (tval == "left") red_transform = ReductionTransform::LeftEigenbasis;
+            else { std::fprintf(stderr, "unknown transform %s\n", tval.c_str()); return 1; }
+        }
+        else if (a == "--solve-time") {
+            solve_time = std::atof(next());
+            run_reduction = true;
+        }
         else if (a == "--verbose") opt.verbose = true;
         else { std::fprintf(stderr, "unknown option %s\n", a.c_str()); usage(); return 1; }
     }
@@ -137,6 +156,58 @@ int main(int argc, char** argv) {
                 g.write(reinterpret_cast<const char*>(E.data()), E.size() * sizeof(double));
             }
         }
+        if (run_reduction) {
+            std::puts("--- Algorithm 4 (Reduction Algorithm) ---");
+            // Find initial state index in state space
+            uint64_t key0 = ss.encode(net.x0.data());
+            int64_t idx0 = ss.find(key0);
+            std::vector<double> P0(ss.n(), 0.0);
+            if (idx0 >= 0 && idx0 < ss.n()) {
+                P0[idx0] = 1.0;
+            } else {
+                std::fill(P0.begin(), P0.end(), 1.0 / ss.n());
+            }
+
+            ReductionOptions red_opt;
+            red_opt.d = opt.d;
+            red_opt.transform = red_transform;
+            red_opt.tol = opt.tol;
+            red_opt.max_iter = opt.max_iter;
+            red_opt.cutoff = opt.cutoff;
+            red_opt.degree = opt.degree;
+            red_opt.backend = backend;
+            red_opt.verbose = opt.verbose;
+
+            ReductionModel red_model = reduce_cme(D, P0, red_opt);
+            std::printf("reduction complete: d = %d, transform = %s\n", red_model.d,
+                        red_transform == ReductionTransform::LeftEigenbasis ? "left eigenbasis" : "none");
+
+            {
+                std::ofstream f(prefix + ".q_reduced.csv");
+                f.precision(17);
+                for (int i = 0; i < red_model.d; ++i)
+                    for (int j = 0; j < red_model.d; ++j)
+                        f << red_model.Q[i * red_model.d + j] << (j + 1 < red_model.d ? "," : "\n");
+            }
+            {
+                std::ofstream f(prefix + ".x0.csv");
+                f.precision(17);
+                for (int i = 0; i < red_model.d; ++i) f << red_model.X0[i] << "\n";
+            }
+            {
+                std::ofstream f(prefix + ".perm.txt");
+                for (int64_t p : red_model.perm) f << p << "\n";
+            }
+            if (solve_time >= 0.0) {
+                std::vector<double> P_sol = red_model.solve(solve_time);
+                std::ofstream f(prefix + ".p_approx.csv");
+                f.precision(17);
+                for (int64_t i = 0; i < ss.n(); ++i) f << P_sol[i] << "\n";
+                std::printf("solved approximate distribution P(t=%.6g) written to %s.p_approx.csv\n",
+                            solve_time, prefix.c_str());
+            }
+        }
+
         return r.converged ? 0 : 2;
     } catch (const std::exception& e) {
         std::fprintf(stderr, "error: %s\n", e.what());

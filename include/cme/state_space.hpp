@@ -23,6 +23,13 @@ struct StateSpace {
             N[s] = static_cast<int>((key / stride[s]) % radix);
         }
     }
+    uint64_t encode(const int* N) const {
+        uint64_t key = 0;
+        for (int s = 0; s < k; ++s) {
+            key += static_cast<uint64_t>(N[s]) * stride[s];
+        }
+        return key;
+    }
     int64_t find(uint64_t key) const;  // -1 if absent
 };
 

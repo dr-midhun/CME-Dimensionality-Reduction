@@ -9,6 +9,7 @@
 
 #include "cme/eigenbasis.hpp"
 #include "cme/network.hpp"
+#include "cme/reduction.hpp"
 #include "cme/state_space.hpp"
 #include "cme/transition.hpp"
 
@@ -94,6 +95,57 @@ int main(int argc, char** argv) {
                   "eigenvalues 0, -18.5210, -35.6842, -51.5383 (dense reference)");
         }
     }
+    // Algorithm 4 validation: MM model reduction (Thesis Section 4.4.2)
+    {
+        std::vector<double> P0(10, 0.1); // Thesis eq. 4.78: P(N, t=0) = [0.1, ..., 0.1]^T
+
+        // 1. Left Eigenbasis Transformation (Thesis Section 4.2.1, eq. 4.94 - 4.100)
+        ReductionOptions ropt_T;
+        ropt_T.d = 4;
+        ropt_T.transform = ReductionTransform::LeftEigenbasis;
+        ropt_T.tol = 1e-12;
+        ropt_T.backend = backend;
+        ReductionModel red_T = reduce_cme(D, P0, ropt_T);
+
+        // Check probability conservation in reduced initial condition X(0)
+        double sumX0_T = 0.0;
+        for (double v : red_T.X0) sumX0_T += v;
+        CHECK(std::fabs(sumX0_T - 1.0) < 1e-6, "Alg 4 (LeftEigenbasis): sum(X0) == 1 (probability conservation)");
+
+        // Check column sums of reduced generator Qdd are zero (Thesis eq. 4.95 note)
+        for (int c = 0; c < red_T.d; ++c) {
+            double csum = 0.0;
+            for (int r = 0; r < red_T.d; ++r) csum += red_T.Q[r * red_T.d + c];
+            CHECK(std::fabs(csum) < 1e-6, "Alg 4 (LeftEigenbasis): colsum(Q) == 0");
+        }
+
+        // Solve reduced system at t = 0.05 (well past t_eps ~ 0.0065)
+        std::vector<double> P_approx_T = red_T.solve(0.05);
+        double sum_P_T = 0.0;
+        for (double v : P_approx_T) sum_P_T += v;
+        CHECK(std::fabs(sum_P_T - 1.0) < 1e-6, "Alg 4 (LeftEigenbasis): sum(P_approx(t)) == 1");
+
+        // 2. No Transformation (T = I) (Thesis Section 4.1, eq. 4.89 - 4.92)
+        ReductionOptions ropt_noT;
+        ropt_noT.d = 4;
+        ropt_noT.transform = ReductionTransform::None;
+        ropt_noT.tol = 1e-12;
+        ropt_noT.backend = backend;
+        ReductionModel red_noT = reduce_cme(D, P0, ropt_noT);
+
+        std::vector<double> P_approx_noT = red_noT.solve(0.05);
+        double sum_P_noT = 0.0;
+        for (double v : P_approx_noT) sum_P_noT += v;
+        CHECK(std::fabs(sum_P_noT - 1.0) < 1e-6, "Alg 4 (NoTransform): sum(P_approx(t)) == 1 (Corollary 1)");
+
+        // Solutions under both transformations should agree with high accuracy for t >= t_eps
+        double max_diff = 0.0;
+        for (size_t i = 0; i < P_approx_T.size(); ++i) {
+            max_diff = std::max(max_diff, std::fabs(P_approx_T[i] - P_approx_noT[i]));
+        }
+        CHECK(max_diff < 1e-5, "Alg 4: LeftEigenbasis and NoTransform approximations agree (max diff < 1e-5)");
+    }
+
     std::printf("%s (%d failures)\n", failures ? "FAILED" : "ALL PASSED", failures);
     return failures ? 1 : 0;
 }

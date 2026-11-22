@@ -12,6 +12,7 @@ endif()
 find_package(OpenMP REQUIRED)
 
 add_library(cme STATIC src/network.cpp src/state_space.cpp src/transition.cpp
+                       src/csr_util.cpp src/reduction.cpp
                        src/eigenbasis.cpp src/eigenbasis_cpu.cpp)
 target_include_directories(cme PUBLIC include)
 target_link_libraries(cme PUBLIC OpenMP::OpenMP_CXX)
